@@ -22,7 +22,7 @@
   },
   "content_scripts": [
     {
-      "run_at" : "document_start",
+      "run_at": "document_start",
       "js": ["src/content/before.js"],
       "matches": [
         "https://*/*",
@@ -30,20 +30,29 @@
       ]
     },
     {
-      "run_at" : "document_idle",
+      "run_at": "document_idle",
       "js": ["src/content/after.js"],
       "matches": [
         "https://*/*",
         "http://*/*"
       ]
+    },
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "js": ["src/content/contentScript.js"]
     }
   ],
   "permissions": [
     "tabs",
-    "scripting"
+    "scripting",
+    "storage"
   ],
   "host_permissions": [
     "https://*/*",
     "http://*/*"
-  ]
+  ],
+  "background": {
+    "service_worker": "src/content/background.js",
+    "type": "module"
+  }
 }

@@ -1,0 +1,27 @@
+{
+  "name": "youtube-filter",
+  "version": "1.0.0",
+  "description": "youtube filter",
+  "main": "popup.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "vite build"
+  },
+  "keywords": [
+    "youtube",
+    "chrome",
+    "extension",
+    "filter"
+  ],
+  "author": "Gary Giambatista",
+  "license": "MIT",
+  "dependencies": {
+    "openai": "^4.76.0",
+    "webextension-polyfill": "^0.12.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.3",
+    "vite-plugin-web-extension": "^4.3.1"
+  }
+}
