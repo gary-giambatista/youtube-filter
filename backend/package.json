@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "youtube-filter backend",
   "main": "server.js",
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js"
@@ -13,6 +14,7 @@
   "author": "Gary Giambatista",
   "license": "MIT",
   "dependencies": {
+    "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "openai": "^4.76.1"
   }

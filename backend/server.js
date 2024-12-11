@@ -1,5 +1,7 @@
-const express = require("express");
-const fetch = require("node-fetch");
+import express from "express";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 const app = express();
 app.use(express.json());
@@ -12,6 +14,8 @@ const openai = new OpenAI({
 
 app.post("/analyze", async (req, res) => {
 	const { titles } = req.body;
+
+	console.log("Titles: ", titles);
 
 	if (!titles || !Array.isArray(titles)) {
 		return res.status(400).json({ error: "Invalid request format." });
@@ -28,7 +32,12 @@ app.post("/analyze", async (req, res) => {
 				},
 				{
 					role: "user",
-					content: titles,
+					content: [
+						{
+							type: "text",
+							text: JSON.stringify(titles),
+						},
+					],
 				},
 			],
 			response_format: {
