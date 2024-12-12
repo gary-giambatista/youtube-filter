@@ -49,6 +49,7 @@ async function processVideoTitles() {
 						return reject(chrome.runtime.lastError.message);
 					}
 					if (response && response.results) {
+						console.log("ContentScript Results: ", response.results);
 						resolve(response.results);
 					} else {
 						reject("No results returned from API");

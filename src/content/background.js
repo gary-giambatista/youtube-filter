@@ -15,10 +15,14 @@ async function fetchNegativityStatus(titles) {
 
 		if (response.ok) {
 			const result = await response.json();
-			return result.data; // Adjust based on your backend response
+			console.log("Received backend result:", result);
+
+			// Adjust result handling based on backend response structure
+			return result.results || []; // Fallback to an empty array if results key is missing
 		} else {
-			console.error("Backend API Error:", await response.text());
-			return null;
+			const errorMessage = await response.text();
+			console.error("Backend API Error:", errorMessage);
+			throw new Error(errorMessage);
 		}
 	} catch (error) {
 		console.error("Error calling backend API:", error);
@@ -28,15 +32,18 @@ async function fetchNegativityStatus(titles) {
 
 // Listener for messages from content or popup scripts
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+	console.log("Received message:", request);
 	if (request.type === "fetchNegativityStatus" && request.titles) {
 		fetchNegativityStatus(request.titles)
-			.then((results) => sendResponse({ results }))
+			.then((results) => {
+				console.log("Results from fetchNegativityStatus:", results);
+				sendResponse({ results });
+			})
 			.catch((error) => {
 				console.error("Error fetching negativity status:", error);
 				sendResponse({ error: "API call failed" });
 			});
 
-		// Required to indicate asynchronous response
-		return true;
+		return true; // Keep the message channel open for async response
 	}
 });

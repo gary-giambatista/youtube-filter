@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import OpenAI from "openai";
 
 dotenv.config();
 
@@ -7,7 +8,6 @@ const app = express();
 app.use(express.json());
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-import OpenAI from "openai";
 const openai = new OpenAI({
 	apiKey: OPENAI_API_KEY,
 });
@@ -32,12 +32,7 @@ app.post("/analyze", async (req, res) => {
 				},
 				{
 					role: "user",
-					content: [
-						{
-							type: "text",
-							text: JSON.stringify(titles),
-						},
-					],
+					content: JSON.stringify(titles),
 				},
 			],
 			response_format: {
@@ -50,17 +45,18 @@ app.post("/analyze", async (req, res) => {
 			presence_penalty: 0,
 		});
 
-		if (!response.ok) {
-			throw new Error("OpenAI API error");
-		}
+		// OpenAI SDK returns a response object; log it to understand its structure
+		console.log("OpenAI Response:", response);
 
-		if (response.ok) {
-			const results = await response.json();
-			return res.json(results); // Adjust this based on your API's response
-		}
+		// Assuming the response contains the necessary data
+		const results = response.choices[0].message.content; // Adjust based on the actual response structure
+		console.log("RESULTS: ", results);
+		return res.json({ results });
 	} catch (error) {
-		console.error(error);
-		res.status(500).json({ error: "Internal server error" });
+		console.error("Caught error:", error.message || error);
+		res
+			.status(500)
+			.json({ error: "Internal server error", details: error.message });
 	}
 });
 
