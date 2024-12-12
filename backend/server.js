@@ -49,9 +49,32 @@ app.post("/analyze", async (req, res) => {
 		console.log("OpenAI Response:", response);
 
 		// Assuming the response contains the necessary data
-		const results = response.choices[0].message.content; // Adjust based on the actual response structure
-		console.log("RESULTS: ", results);
-		return res.json({ results });
+		// const results = response.choices[0].message.content; // Adjust based on the actual response structure
+		// console.log("RESULTS: ", results);
+
+		// return res.json({ results });
+
+		const rawContent = response.choices[0].message.content;
+
+		// Remove any non-JSON elements like backticks, comments, or code formatting
+		const cleanedContent = rawContent
+			.replace(/```[\s\S]*?\n|```/g, "") // Remove code blocks
+			.replace(/\/\/.*$/gm, "") // Remove comments
+			.trim();
+
+		try {
+			const results = JSON.parse(cleanedContent);
+			console.log("RESULTS: ", results);
+			return res.json({ results });
+		} catch (parseError) {
+			console.error(
+				"Error parsing OpenAI response:",
+				parseError,
+				"Raw content:",
+				rawContent
+			);
+			res.status(500).json({ error: "Invalid response from OpenAI" });
+		}
 	} catch (error) {
 		console.error("Caught error:", error.message || error);
 		res

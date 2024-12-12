@@ -71,7 +71,8 @@ async function processVideoTitles() {
 				const negativeVideoCard = nonAnalyzedVideos[index];
 
 				if (negativeVideoCard) {
-					negativeVideoCard.style.display = "none";
+					negativeVideoCard.style.opacity = "0";
+					negativeVideoCard.style.pointerEvents = "none";
 					console.log("Hiding negative video:", title);
 				}
 			}
