@@ -40,10 +40,16 @@
     {
       "matches": ["https://www.youtube.com/*"],
       "js": ["src/content/contentScript.js"]
+    },
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "css": ["src/content/content.css"],
+      "run_at": "document_start"
     }
   ],
   "permissions": [
     "tabs",
+    "activeTab",
     "scripting",
     "storage"
   ],

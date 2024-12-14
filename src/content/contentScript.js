@@ -71,10 +71,11 @@ async function processVideoTitles() {
 				const negativeVideoCard = nonAnalyzedVideos[index];
 
 				if (negativeVideoCard) {
-					negativeVideoCard.style.opacity = "0";
-					negativeVideoCard.style.pointerEvents = "none";
 					console.log("Hiding negative video:", title);
 				}
+			} else if (!isNegativeVideo) {
+				// Remove filter effect on the video
+				nonAnalyzedVideos[index].style.filter = "none";
 			}
 			// Add 'analyzed' class to current video to prevent 1 to 1 mapping (negativityResults -> nonAnalyzedVideos) from being thrown off when new videos are parsed then submitted to OpenAI
 			nonAnalyzedVideos[index].classList.add("analyzed");
@@ -103,5 +104,16 @@ function debounce(func, wait) {
 }
 
 // Todo:
-// 1. Get OpenAI API call working
-// 2. Handle Loading state -> videos displayed none, parsed videos display block and parsed but NOT analyzed videos hidden by default with loading overlay, after results, hide negative results with display none
+// 1. Get app switch working to disable / enable the app filtering
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+	if (request.toggleState !== undefined) {
+		if (request.toggleState) {
+			console.log("Feature enabled");
+			// Enable the feature
+		} else {
+			console.log("Feature disabled");
+			// Disable the feature
+		}
+	}
+});

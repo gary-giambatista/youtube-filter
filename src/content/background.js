@@ -47,3 +47,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 		return true; // Keep the message channel open for async response
 	}
 });
+
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+	if (request.toggleState !== undefined) {
+		console.log("Background.js Toggle state received: ", request.toggleState);
+		// Forward the toggle state to the active tab's content script
+		chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+			if (tabs[0]) {
+				chrome.tabs.sendMessage(tabs[0].id, {
+					toggleState: request.toggleState,
+				});
+			}
+		});
+	}
+});
