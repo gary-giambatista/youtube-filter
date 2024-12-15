@@ -1,11 +1,34 @@
 /** @type {string[]} - video titles to be analyzed by OpenAI */
 const videoTitles = [];
 
-// 1. Observe the "contents" element for when new videos are added by YouTube
-const contentsElement = document.querySelector("#contents");
-if (contentsElement) {
+/**
+ * Function to observe the #contents element once it exists.
+ */
+function waitForContentsElement() {
+	const parentContainer = document.querySelector("#content"); // Parent that will always exist
+	if (parentContainer) {
+		const observer = new MutationObserver(() => {
+			const contentsElement = document.querySelector("#contents");
+			if (contentsElement) {
+				console.log("#contents element found!");
+				observer.disconnect(); // Stop observing once #contents is found
+				setupContentsObserver(contentsElement); // Call the function to observe #contents
+			}
+		});
+
+		observer.observe(parentContainer, { childList: true, subtree: true });
+		console.log("Waiting for #contents element...");
+	} else {
+		console.error("Could not find #content parent container to observe.");
+	}
+}
+
+/**
+ * Sets up a MutationObserver on the #contents element to detect new videos.
+ * @param {Element} contentsElement
+ */
+function setupContentsObserver(contentsElement) {
 	const observer = new MutationObserver(() => {
-		// Parse ONLY new video titles (non-parsed video titles)
 		document
 			.querySelectorAll("ytd-rich-item-renderer:has(#video-title:not(.parsed))")
 			.forEach((videoCard) => {
@@ -23,9 +46,10 @@ if (contentsElement) {
 
 	observer.observe(contentsElement, { childList: true, subtree: true });
 	console.log("Observer set up to detect new videos.");
-} else {
-	console.error("#contents element not found.");
 }
+
+// Start observing for the #contents element
+waitForContentsElement();
 
 // 2. Debounced version of the process function
 const debouncedProcess = debounce(processVideoTitles, 500);
