@@ -1,11 +1,11 @@
 {
-  "name": "Fresh Chrome Extension boilerplate",
-  "description": "Fully functional, useful bare minimum Google Chrome extension boilerplate [Manifest V3].",
+  "name": "YouTube Homepage Filter",
+  "description": "Filter negative videos from YouTube's recommendation feed.",
   "homepage_url": "https://github.com/llagerlof/fresh-chrome-extension",
-  "version": "3.1.0",
+  "version": "0.1",
   "manifest_version": 3,
   "action": {
-    "default_title": "Fresh Chrome Extension boilerplate 3.1.0",
+    "default_title": "YouTube Homepage Filter",
     "default_popup": "src/popup/popup.html",
     "default_icon": {
       "16": "assets/icons/icon16.png",
@@ -25,24 +25,23 @@
       "run_at": "document_start",
       "js": ["src/content/before.js"],
       "matches": [
-        "https://*/*",
-        "http://*/*"
+        "https://www.youtube.com/"
       ]
     },
     {
       "run_at": "document_idle",
       "js": ["src/content/after.js"],
       "matches": [
-        "https://*/*",
-        "http://*/*"
+        "https://www.youtube.com/"
       ]
     },
     {
-      "matches": ["https://www.youtube.com/*"],
+      "run_at": "document_idle",
+      "matches": ["https://www.youtube.com/"],
       "js": ["src/content/contentScript.js"]
     },
     {
-      "matches": ["*://*.youtube.com/*"],
+      "matches": ["https://www.youtube.com/"],
       "css": ["src/content/content.css"],
       "run_at": "document_start"
     }
