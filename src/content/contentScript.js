@@ -128,7 +128,7 @@ function debounce(func, wait) {
 }
 
 // Todo:
-// 1. Get app switch working to disable / enable the app filtering
+// 1. Add setting to enable/disable the app via the toggle switch
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	if (request.toggleState !== undefined) {
