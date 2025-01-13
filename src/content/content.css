@@ -18,3 +18,8 @@
 ytd-rich-item-renderer:has(#video-title) {
 	filter: brightness(0.5) blur(5px);
 }
+
+/* Hide Shorts */
+ytd-rich-shelf-renderer {
+	display: none;
+}

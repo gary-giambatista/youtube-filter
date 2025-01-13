@@ -9,7 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
 	toggle.addEventListener("change", () => {
 		toggleStatus.textContent = toggle.checked ? "On" : "Off";
 
-		// Send toggle state to the background script
+		// Send toggle state to the background script (for maintaining all tabs state)
 		chrome.runtime.sendMessage({ toggleState: toggle.checked });
 	});
 });

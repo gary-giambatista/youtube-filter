@@ -48,6 +48,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	}
 });
 
+// TODO: Likely need to use chrome.storage here so ALL tabs sync with the popup.html's setting
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	if (request.toggleState !== undefined) {
 		console.log("Background.js Toggle state received: ", request.toggleState);

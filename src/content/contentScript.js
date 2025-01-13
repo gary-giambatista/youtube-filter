@@ -1,5 +1,7 @@
 /** @type {string[]} - video titles to be analyzed by OpenAI */
 const videoTitles = [];
+/** @type {boolean} - setting to enable/disable the negativity filter */
+const disableNegativityFilter = false;
 
 /**
  * Function to observe the #contents element once it exists.
@@ -56,6 +58,9 @@ const debouncedProcess = debounce(processVideoTitles, 500);
 
 // 3.
 async function processVideoTitles() {
+	if (disableNegativityFilter) {
+		return;
+	}
 	if (videoTitles.length < 1) {
 		return;
 	}
