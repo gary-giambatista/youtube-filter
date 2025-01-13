@@ -1,7 +1,7 @@
 /** @type {string[]} - video titles to be analyzed by OpenAI */
 const videoTitles = [];
 /** @type {boolean} - setting to enable/disable the negativity filter */
-const disableNegativityFilter = false;
+let disableNegativityFilter = false;
 
 /**
  * Function to observe the #contents element once it exists.
@@ -39,6 +39,10 @@ function setupContentsObserver(contentsElement) {
 					const title = titleElement.textContent.trim();
 					videoTitles.push(title);
 					titleElement.classList.add("parsed");
+				}
+				// Hide Videos by default if negativity filter enabled
+				if (!disableNegativityFilter) {
+					videoCard.classList.add("yt-neg-filter-on");
 				}
 			});
 
@@ -104,7 +108,7 @@ async function processVideoTitles() {
 				}
 			} else if (!isNegativeVideo) {
 				// Remove filter effect on the video
-				nonAnalyzedVideos[index].style.filter = "none";
+				nonAnalyzedVideos[index].classList.remove("yt-neg-filter-on");
 			}
 			// Add 'analyzed' class to current video to prevent 1 to 1 mapping (negativityResults -> nonAnalyzedVideos) from being thrown off when new videos are parsed then submitted to OpenAI
 			nonAnalyzedVideos[index].classList.add("analyzed");
@@ -133,16 +137,31 @@ function debounce(func, wait) {
 }
 
 // Todo:
-// 1. Add setting to enable/disable the app via the toggle switch
+// 1. Implement setting and functionality for hiding shorts
+// 2. Add setting to enable/disable shorts
 
+// Listen for messages from the background script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-	if (request.toggleState !== undefined) {
-		if (request.toggleState) {
-			console.log("Feature enabled");
-			// Enable the feature
+	if (request.negativityFilterToggleState !== undefined) {
+		if (request.negativityFilterToggleState) {
+			console.log("Negativity Filter enabled");
+			disableNegativityFilter = false;
 		} else {
-			console.log("Feature disabled");
-			// Disable the feature
+			console.log("Negativity Filter disabled");
+			disableNegativityFilter = true;
+		}
+	}
+});
+
+// Get initial toggle state when the content script is loaded
+chrome.storage.local.get("negativityFilterToggleState", (result) => {
+	if (result.negativityFilterToggleState !== undefined) {
+		if (result.negativityFilterToggleState) {
+			console.log("Initial Load: negativity filter enabled");
+			disableNegativityFilter = false;
+		} else {
+			console.log("Initial Load: negativity filter disabled");
+			disableNegativityFilter = true;
 		}
 	}
 });

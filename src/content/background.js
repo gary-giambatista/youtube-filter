@@ -48,17 +48,36 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	}
 });
 
-// TODO: Likely need to use chrome.storage here so ALL tabs sync with the popup.html's setting
+// Listen for messages from popup.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-	if (request.toggleState !== undefined) {
-		console.log("Background.js Toggle state received: ", request.toggleState);
-		// Forward the toggle state to the active tab's content script
-		chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-			if (tabs[0]) {
-				chrome.tabs.sendMessage(tabs[0].id, {
-					toggleState: request.toggleState,
+	if (request.negativityFilterToggleState !== undefined) {
+		console.log(
+			"Background.js: Toggle state received:",
+			request.negativityFilterToggleState
+		);
+
+		// Notify all tabs about the updated toggle state
+		chrome.tabs.query({}, (tabs) => {
+			tabs.forEach((tab) => {
+				chrome.tabs.sendMessage(tab.id, {
+					negativityFilterToggleState: request.negativityFilterToggleState,
 				});
-			}
+			});
 		});
 	}
+});
+
+// Sync toggle state to new tabs when they are created
+chrome.tabs.onCreated.addListener((tab) => {
+	chrome.storage.local.get("negativityFilterToggleState", (result) => {
+		if (result.negativityFilterToggleState !== undefined) {
+			console.log(
+				"Background.js: Syncing toggle state to new tab:",
+				result.negativityFilterToggleState
+			);
+			chrome.tabs.sendMessage(tab.id, {
+				negativityFilterToggleState: result.negativityFilterToggleState,
+			});
+		}
+	});
 });

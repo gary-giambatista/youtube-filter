@@ -15,11 +15,16 @@
 } */
 
 /* Apply Filter effect on the video by default */
-ytd-rich-item-renderer:has(#video-title) {
+/* ytd-rich-item-renderer:has(#video-title) {
+	filter: brightness(0.5) blur(5px);
+} */
+/* Default negative video fitler (removed if the video is positive) */
+.yt-neg-filter-on {
 	filter: brightness(0.5) blur(5px);
 }
 
 /* Hide Shorts */
+/* TODO: doesn't work + update to work with JS in content scripts like above class */
 ytd-rich-shelf-renderer {
 	display: none;
 }
