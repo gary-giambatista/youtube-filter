@@ -1,7 +1,48 @@
-/** @type {string[]} - video titles to be analyzed by OpenAI */
+/** @type {string[]} - video titles to be analyzed by ML model */
 const videoTitles = [];
-/** @type {boolean} - setting to enable/disable the negativity filter */
-let disableNegativityFilter = false;
+/** @type {boolean} - default/intial extension setting to enable/disable the negativity filter */
+let enableNegativityFilter = true;
+/** @type {boolean} - default/intial extension setting to enable/disable the shorts filter */
+let enableShortsFilter = true;
+
+// Get initial user settings from storage after page load (document_idle)
+// This is necessary because popup.js only runs when the popup.html is opened
+chrome.storage.local.get("userSettings", (result) => {
+	console.log("contentScripts.js 1: Storage result: ", result);
+	if (result.userSettings !== undefined) {
+		console.log(
+			"contentScripts.js 1: Storage result settings: ",
+			result.userSettings
+		);
+		result.userSettings.forEach(updateState);
+	}
+});
+
+// Listen for messages from the background script
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+	console.log("contentScripts.js 2: Received request", request);
+	if (request.userSettings) {
+		console.log(
+			"contentScripts.js 2: Received userSettings",
+			request.userSettings
+		);
+		request.userSettings.forEach(updateState);
+	}
+});
+
+// Helper function to update state based on the setting name
+function updateState(setting) {
+	if (setting.name === "negativityFilterToggleState") {
+		enableNegativityFilter = setting.enabled;
+		console.log(
+			`Negativity Filter ${setting.enabled ? "enabled" : "disabled"}`
+		);
+	}
+	if (setting.name === "shortsFilterToggleState") {
+		enableShortsFilter = setting.enabled;
+		console.log(`Shorts Filter ${setting.enabled ? "enabled" : "disabled"}`);
+	}
+}
 
 /**
  * Function to observe the #contents element once it exists.
@@ -31,20 +72,32 @@ function waitForContentsElement() {
  */
 function setupContentsObserver(contentsElement) {
 	const observer = new MutationObserver(() => {
-		document
-			.querySelectorAll("ytd-rich-item-renderer:has(#video-title:not(.parsed))")
-			.forEach((videoCard) => {
-				const titleElement = videoCard.querySelector("#video-title");
-				if (titleElement) {
-					const title = titleElement.textContent.trim();
-					videoTitles.push(title);
-					titleElement.classList.add("parsed");
-				}
-				// Hide Videos by default if negativity filter enabled
-				if (!disableNegativityFilter) {
+		// 1. Begin extension's functionality
+		if (enableNegativityFilter) {
+			// Grab all currently loaded video titles from the DOM and mark them as parsed
+			document
+				.querySelectorAll(
+					"ytd-rich-item-renderer:has(#video-title:not(.parsed))"
+				)
+				.forEach((videoCard) => {
+					const titleElement = videoCard.querySelector("#video-title");
+					if (titleElement) {
+						const title = titleElement.textContent.trim();
+						videoTitles.push(title);
+						titleElement.classList.add("parsed");
+					}
+					// Apply filter to Negative Videos on page load
 					videoCard.classList.add("yt-neg-filter-on");
-				}
-			});
+				});
+		}
+		// Hide Shorts on page load if shorts filter enabled
+		if (enableShortsFilter) {
+			document
+				.querySelectorAll("ytd-rich-shelf-renderer")
+				.forEach((shortsSection) => {
+					shortsSection.classList.add("yt-short-filter-on");
+				});
+		}
 
 		// Trigger debounced processing
 		debouncedProcess();
@@ -60,9 +113,9 @@ waitForContentsElement();
 // 2. Debounced version of the process function
 const debouncedProcess = debounce(processVideoTitles, 500);
 
-// 3.
+// 3. API call and logic to carry out main function of hiding negative videos
 async function processVideoTitles() {
-	if (disableNegativityFilter) {
+	if (enableNegativityFilter === false) {
 		return;
 	}
 	if (videoTitles.length < 1) {
@@ -137,31 +190,5 @@ function debounce(func, wait) {
 }
 
 // Todo:
-// 1. Implement setting and functionality for hiding shorts
-// 2. Add setting to enable/disable shorts
-
-// Listen for messages from the background script
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-	if (request.negativityFilterToggleState !== undefined) {
-		if (request.negativityFilterToggleState) {
-			console.log("Negativity Filter enabled");
-			disableNegativityFilter = false;
-		} else {
-			console.log("Negativity Filter disabled");
-			disableNegativityFilter = true;
-		}
-	}
-});
-
-// Get initial toggle state when the content script is loaded
-chrome.storage.local.get("negativityFilterToggleState", (result) => {
-	if (result.negativityFilterToggleState !== undefined) {
-		if (result.negativityFilterToggleState) {
-			console.log("Initial Load: negativity filter enabled");
-			disableNegativityFilter = false;
-		} else {
-			console.log("Initial Load: negativity filter disabled");
-			disableNegativityFilter = true;
-		}
-	}
-});
+// 1. Properly style setting to enable/disable shorts
+// 2. Remove uneeded before/after js files

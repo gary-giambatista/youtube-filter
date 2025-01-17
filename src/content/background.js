@@ -30,9 +30,9 @@ async function fetchNegativityStatus(titles) {
 	}
 }
 
-// Listener for messages from content or popup scripts
+// Listener for messages from contentScript.js to call ML Model API request
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-	console.log("Received message:", request);
+	console.log("Background.js 1: Received message:", request);
 	if (request.type === "fetchNegativityStatus" && request.titles) {
 		fetchNegativityStatus(request.titles)
 			.then((results) => {
@@ -48,36 +48,40 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	}
 });
 
-// Listen for messages from popup.js
+// Listen for messages from popup.js (handle user settings updates) -> send to contentScript.js
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-	if (request.negativityFilterToggleState !== undefined) {
+	console.log("Background.js 2: Received request", request);
+	if (request.userSettings) {
 		console.log(
-			"Background.js: Toggle state received:",
-			request.negativityFilterToggleState
+			"Background.js 2: Received user settings",
+			request.userSettings
 		);
 
-		// Notify all tabs about the updated toggle state
+		// Forward updated settings to ONLY YouTube homepage tabs
 		chrome.tabs.query({}, (tabs) => {
 			tabs.forEach((tab) => {
-				chrome.tabs.sendMessage(tab.id, {
-					negativityFilterToggleState: request.negativityFilterToggleState,
-				});
+				if (tab.url === "https://www.youtube.com/") {
+					console.log("Background.js 2: Matched Tab(s) sent to: ", tab);
+					chrome.tabs.sendMessage(tab.id, {
+						userSettings: request.userSettings,
+					});
+				}
 			});
 		});
 	}
 });
 
-// Sync toggle state to new tabs when they are created
+// Sync all settings to new tabs when they are created (sync new tabs with latest user settings) -> send to contentScript.js
 chrome.tabs.onCreated.addListener((tab) => {
-	chrome.storage.local.get("negativityFilterToggleState", (result) => {
-		if (result.negativityFilterToggleState !== undefined) {
-			console.log(
-				"Background.js: Syncing toggle state to new tab:",
-				result.negativityFilterToggleState
-			);
-			chrome.tabs.sendMessage(tab.id, {
-				negativityFilterToggleState: result.negativityFilterToggleState,
-			});
+	chrome.storage.local.get("userSettings", (result) => {
+		const userSettings = result?.userSettings ?? null;
+		if (!userSettings) {
+			console.log("Background.js 3: No LS to sync new tab with yet");
 		}
+
+		console.log("Background.js 3: Syncing settings to new tab:", userSettings);
+
+		// Send the entire settings object to the new tab
+		chrome.tabs.sendMessage(tab.id, { userSettings: userSettings });
 	});
 });

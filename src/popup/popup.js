@@ -1,30 +1,50 @@
 console.log("popup.js loaded");
 
-// TODO: Make sure there are no state mismatches on initial install for negativityFilterToggleState, as nothing is setting chrome.storage to true on initial load
+// TODO: Make sure there are no state mismatches on initial install for negativityFilterToggleState (should work via default boolean variable values in contentScript.js)
 document.addEventListener("DOMContentLoaded", () => {
 	console.log("DOM CONTENT LOADED");
 
-	const toggle = document.getElementById("toggle");
-	const toggleStatus = document.getElementById("toggle-status");
+	const defaultUserSettings = [
+		{
+			name: "negativityFilterToggleState",
+			selector: "#negativity-filter",
+			enabled: true,
+		},
+		{
+			name: "shortsFilterToggleState",
+			selector: "#shorts-filter",
+			enabled: true,
+		},
+	];
 
-	// Step 1: Retrieve the initial toggle state from chrome.storage
-	chrome.storage.local.get("negativityFilterToggleState", (result) => {
-		const isEnabled = result.negativityFilterToggleState ?? false; // Default to false if undefined
-		toggle.checked = isEnabled;
-		toggleStatus.textContent = isEnabled ? "On" : "Off";
-	});
+	// 1: Load settings from chrome.storage else use default settings
+	chrome.storage.local.get("userSettings", (result) => {
+		const activeUserSettings = result.userSettings || defaultUserSettings;
 
-	// Step 2: Add event listener for user interaction with the toggle switch
-	toggle.addEventListener("change", () => {
-		const newState = toggle.checked;
-		toggleStatus.textContent = newState ? "On" : "Off";
+		// 2: Sync the popup.html to these settings
+		activeUserSettings.forEach((setting) => {
+			const toggleDiv = document.querySelector(setting.selector);
+			const toggle = toggleDiv.querySelector("input[type='checkbox']");
+			const toggleStatus = toggleDiv.querySelector("#toggle-status");
 
-		// Step 3: Store the new toggle state in chrome.storage
-		chrome.storage.local.set({ negativityFilterToggleState: newState }, () => {
-			console.log("Popup.js: Toggle state updated to", newState);
+			const isEnabled = setting.enabled;
+			toggle.checked = isEnabled;
+			toggleStatus.textContent = isEnabled ? "Enabled" : "Disabled";
 
-			// Step 4: Notify the background script of the new toggle state
-			chrome.runtime.sendMessage({ negativityFilterToggleState: newState });
+			// 3: Add event listener for changes in checkbox's checked state
+			toggle.addEventListener("change", () => {
+				const newToggleState = toggle.checked;
+				toggleStatus.textContent = newToggleState ? "Enabled" : "Disabled";
+
+				// 4. Update the setting in chrome.storage
+				setting.enabled = newToggleState;
+				chrome.storage.local.set({ userSettings: activeUserSettings }, () => {
+					console.log(`Popup.js: ${setting.name} updated to`, newToggleState);
+
+					// 5. Notify background.js of the updated settings
+					chrome.runtime.sendMessage({ userSettings: activeUserSettings });
+				});
+			});
 		});
 	});
 });
