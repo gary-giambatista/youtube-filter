@@ -190,5 +190,4 @@ function debounce(func, wait) {
 }
 
 // Todo:
-// 1. Properly style setting to enable/disable shorts
-// 2. Remove uneeded before/after js files
+// 1. Coordinate with Jake on status of rust backend

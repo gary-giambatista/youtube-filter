@@ -6,15 +6,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
     body {
-      width: 200px;
+      width: 220px;
       padding: 10px;
       font-family: Arial, sans-serif;
+    }
+
+    h1 {
+      font-size: 1rem;
+      margin-top: 5px;
     }
 
     .toggle-switch {
       display: flex;
       align-items: center;
       gap: 8px;
+    }
+
+    .toggle-switch h2 {
+      font-size: .875rem;
+      width: 50%;
     }
 
     .switch {
@@ -71,18 +81,20 @@
   <script type="module" src="./popup.js"></script>
 </head>
 <body>
+  <h1>YouTube Homepage Filters:</h1>
+  <hr></hr>
   <main>
     <div id="negativity-filter" class="toggle-switch">
+      <h2>Negative Videos:</h2>
       <label class="switch">
-        Hide Negative Videos:
         <input type="checkbox" id="toggle" checked="true">
         <span class="slider"></span>
       </label>
       <span id="toggle-status">Enabled</span>
     </div>
     <div id="shorts-filter" class="toggle-switch">
+      <h2>Shorts:</h2>
       <label class="switch">
-        Hide Shorts:
         <input type="checkbox" id="toggle" checked="true">
         <span class="slider"></span>
       </label>
