@@ -8,17 +8,17 @@
     "default_title": "YouTube Homepage Filter",
     "default_popup": "src/popup/popup.html",
     "default_icon": {
-      "16": "assets/icons/icon16.png",
-      "32": "assets/icons/icon32.png",
-      "64": "assets/icons/icon64.png",
-      "128": "assets/icons/icon128.png"
+      "16": "public/assets/icons/icon16.png",
+      "32": "public/assets/icons/icon32.png",
+      "64": "public/assets/icons/icon64.png",
+      "128": "public/assets/icons/icon128.png"
     }
   },
   "icons": {
-    "16": "assets/icons/icon16.png",
-    "32": "assets/icons/icon32.png",
-    "64": "assets/icons/icon64.png",
-    "128": "assets/icons/icon128.png"
+    "16": "public/assets/icons/icon16.png",
+    "32": "public/assets/icons/icon32.png",
+    "64": "public/assets/icons/icon64.png",
+    "128": "public/assets/icons/icon128.png"
   },
   "content_scripts": [
     {
