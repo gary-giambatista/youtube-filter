@@ -1,41 +1,63 @@
 {
-	"name": "YouTube Homepage Filter",
-	"description": "Filter negative videos from YouTube's recommendation feed.",
-	"homepage_url": "https://github.com/llagerlof/fresh-chrome-extension",
-	"version": "0.1",
-	"manifest_version": 3,
-	"action": {
-		"default_title": "YouTube Homepage Filter",
-		"default_popup": "src/popup/popup.html",
-		"default_icon": {
-			"16": "assets/icons/icon16.png",
-			"32": "assets/icons/icon32.png",
-			"64": "assets/icons/icon64.png",
-			"128": "assets/icons/icon128.png"
-		}
-	},
-	"icons": {
-		"16": "assets/icons/icon16.png",
-		"32": "assets/icons/icon32.png",
-		"64": "assets/icons/icon64.png",
-		"128": "assets/icons/icon128.png"
-	},
-	"background": {
-		"service_worker": "src/content/background.js",
-		"type": "module"
-	},
-	"content_scripts": [
-		{
-			"run_at": "document_idle",
-			"matches": ["https://www.youtube.com/"],
-			"js": ["src/content/contentScript.js"]
-		},
-		{
-			"matches": ["https://www.youtube.com/"],
-			"css": ["src/content/content.css"],
-			"run_at": "document_start"
-		}
-	],
-	"permissions": ["tabs", "activeTab", "scripting", "storage"],
-	"host_permissions": ["https://*/*", "http://*/*"]
+  "name": "YouTube Homepage Filter",
+  "description": "Filter negative videos from YouTube's recommendation feed.",
+  "homepage_url": "https://github.com/llagerlof/fresh-chrome-extension",
+  "version": "0.1",
+  "manifest_version": 3,
+  "action": {
+    "default_title": "YouTube Homepage Filter",
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "public/assets/icons/icon16.png",
+      "32": "public/assets/icons/icon32.png",
+      "64": "public/assets/icons/icon64.png",
+      "128": "public/assets/icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "public/assets/icons/icon16.png",
+    "32": "public/assets/icons/icon32.png",
+    "64": "public/assets/icons/icon64.png",
+    "128": "public/assets/icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "run_at": "document_start",
+      "js": ["src/content/before.js"],
+      "matches": [
+        "https://www.youtube.com/"
+      ]
+    },
+    {
+      "run_at": "document_idle",
+      "js": ["src/content/after.js"],
+      "matches": [
+        "https://www.youtube.com/"
+      ]
+    },
+    {
+      "run_at": "document_idle",
+      "matches": ["https://www.youtube.com/"],
+      "js": ["src/content/contentScript.js"]
+    },
+    {
+      "matches": ["https://www.youtube.com/"],
+      "css": ["src/content/content.css"],
+      "run_at": "document_start"
+    }
+  ],
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "src/content/background.js",
+    "type": "module"
+  }
 }

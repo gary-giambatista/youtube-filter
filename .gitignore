@@ -25,3 +25,7 @@ yarn-error.log*
 
 # Optional: Ignore build output if generated during packaging
 output/
+
+#rust
+backend/target
+**/*.rs.bk

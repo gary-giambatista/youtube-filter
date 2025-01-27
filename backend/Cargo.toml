@@ -1,0 +1,16 @@
+[package]
+name = "backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+axum = {version = "0.8.1", features = ["json"]}
+reqwest = {version = "0.12.12", features = ["json"]}
+serde = {version = "1.0.217", features = ["derive"]}
+serde_json = "1.0.137"
+tokio = {version = "1.43.0", features = ["full"]}
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"  # Optimize for size
