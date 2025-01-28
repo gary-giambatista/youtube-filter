@@ -21,3 +21,7 @@ To run the app locally navigate to the `/backend` directory and run `cargo run` 
 
 ## Building locally
 To build the app navigate to the `backend` folder and run `cargo build`. To build for windows append the `--target x86_64-pc-windows-gnu` flag. To build a release build append the `-r` flag.
+
+## Running locally
+1. After building find the executable you want to run in the `/target` directory
+2. Set the environment variable for your api key in the terminal. For windows open Powershell and run `$env:OPENAI_API_KEY="your key here"`. For bash `export OPENAI_API_KEY = "your_key_here"`

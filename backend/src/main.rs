@@ -46,23 +46,23 @@ async fn analyze_handler(
     let mut headers = HeaderMap::new();
 
     headers.insert("Content-Type", HeaderValue::from_str("application/json").unwrap());
-    let open_ai_api_key = match env::var("OPENAI_API_KEY"){
+    let open_ai_api_key =  match env::var("OPENAI_API_KEY"){
         Ok(key) => key,
         Err(_) => return ResJson(Response {
             results: None,
             error: Some("OpenAI API key not found".to_string()),
             })
         };
+        
     headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", open_ai_api_key)).unwrap());
     
     // Make the request to OpenAI API.
     let prompt = PROMPT.to_string();
     let response = match client
-        .post("http://localhost:11434/v1/completions")
-        //.post("https://api.openai.com/v1/chat/completions")
+        .post("https://api.openai.com/v1/chat/completions")
         .headers(headers)
         .json(&serde_json::json!({
-            "model": "phi4", //"model": "gpt-4o-mini",
+            "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
@@ -70,18 +70,20 @@ async fn analyze_handler(
                 },
                 {
                     "role": "user",
-                    "content": req.titles
+                    "content": serde_json::to_string(&req.titles).unwrap()
                 }
             ],
-            "response_format": { "type": "json_schema" },
-            "json_schema": {
-                "name": "VideoTitlePositivity",
-                "schema":{
-                    "type": "object",
-                    "properties": {
-                        "titleNegativity": {
-                            "type": "array",
-                            "items": {"type": "boolean"}
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "VideoTitlePositivity",
+                    "schema":{
+                        "type": "object",
+                        "properties": {
+                            "titleNegativity": {
+                                "type": "array",
+                                "items": {"type": "boolean"}
+                            }
                         }
                     }
                 }
@@ -113,28 +115,49 @@ async fn analyze_handler(
         },
     };
 
-    // Extract the boolean array from the response
-    // This assumes the response is in a format like:
-    // {"choices":[{"message":{"content":"[true, false, true]"}}]}
-    let boolean_array = match parsed_response["choices"][0]["message"]["content"]
-        .as_str() {
-        Some(s) => serde_json::from_str::<Vec<bool>>(s),
+    // Extract the response content as a string
+    let content = match parsed_response["choices"][0]["message"]["content"].as_str(){
+        Some(s) => s,
         None => return ResJson(Response {
             results: None,
             error: Some("Invalid response format from OpenAI".to_string()),
         }),
     };
 
-    // Convert the boolean array from a string to a vector of booleans
-    let boolean_array = match boolean_array {
-        Ok(arr) => arr,
+    // parse titleNegativity array from content
+    let title_negativity = match serde_json::from_str::<serde_json::Value>(content){
+        Ok(v) => v,
         Err(e) => {
             return ResJson(Response {
-                results: Some(vec![]),
-                error: Some(format!("Failed to deserialize boolean array: {}", e)),
+                results: None,
+                error: Some(format!("Failed to parse titleNegativity array from response: {}", e)),
             });
         },
     };
+
+    let boolean_array: Vec<bool> = match title_negativity["titleNegativity"].as_array(){
+        Some(arr) => arr.iter().map(|v| v.as_bool().unwrap()).collect(),
+        None => return ResJson(Response {
+            results: None,
+            error: Some("Invalid response format from OpenAI".to_string()),
+        }),
+    };
+
+    //Print Diagnostics
+    println!("Inference Successful\n\n");
+    println!("OpenAI Response\n");
+    println!("Response: {}\n\n", response);
+    println!("Number of titles received: {}", titles.len());
+    println!("Number of inferences: {}\n\n", boolean_array.len());
+    println!("Received titles:");
+    for title in titles.iter() {
+        println!("{}", title);
+    }
+    
+    println!("\n\nInferences:");
+    for (title, result) in titles.iter().zip(boolean_array.iter()) {
+        println!("Title: {}, Negative: {}", title, result);
+    }
 
     // Return the boolean array as a JSON response
     ResJson(Response {
@@ -142,6 +165,7 @@ async fn analyze_handler(
         error: None,
     })
 
+    
 }
 
 
