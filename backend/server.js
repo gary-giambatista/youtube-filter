@@ -13,12 +13,15 @@ const openai = new OpenAI({
 });
 
 app.post("/analyze", async (req, res) => {
-	const { titles } = req.body;
+	const { title } = req.body;
 
-	console.log("Titles: ", titles);
+	console.log("req.body: ", req.body);
+	// console.log("Titles: ", title);
 
-	if (!titles || !Array.isArray(titles)) {
-		return res.status(400).json({ error: "Invalid request format." });
+	if (!title || typeof title !== "string") {
+		return res
+			.status(400)
+			.json({ error: "Invalid request format. Please submit 1 string" });
 	}
 
 	try {
@@ -28,18 +31,30 @@ app.post("/analyze", async (req, res) => {
 				{
 					role: "system",
 					content:
-						"You are a moderator for text inputs which represent the title of YouTube videos. Your task is to determine if the video titles are negative or not negative. You will receive a JavaScript array of strings which represent video titles and it is your task to return a JavaScript array of booleans, where the boolean value of that index is determined by the video title's context; if it is a negative context please return true for that index, if it is not negative please return false. The array of booleans returned should match the length of the array of strings submitted.",
+						"Return true if the text has a negative context, otherwise return false.",
 				},
 				{
 					role: "user",
-					content: JSON.stringify(titles),
+					content: title,
 				},
 			],
 			response_format: {
-				type: "text",
+				type: "json_schema",
+				json_schema: {
+					name: "VideoTitlePositivity",
+					schema: {
+						type: "object",
+						properties: {
+							isNegative: {
+								type: "boolean",
+							},
+						},
+						required: ["isNegative"],
+					},
+				},
 			},
-			temperature: 1,
-			max_tokens: 500,
+			temperature: 0,
+			max_tokens: 10,
 			top_p: 1,
 			frequency_penalty: 0,
 			presence_penalty: 0,
@@ -48,22 +63,10 @@ app.post("/analyze", async (req, res) => {
 		// OpenAI SDK returns a response object; log it to understand its structure
 		console.log("OpenAI Response:", response);
 
-		// Assuming the response contains the necessary data
-		// const results = response.choices[0].message.content; // Adjust based on the actual response structure
-		// console.log("RESULTS: ", results);
-
-		// return res.json({ results });
-
 		const rawContent = response.choices[0].message.content;
 
-		// Remove any non-JSON elements like backticks, comments, or code formatting
-		const cleanedContent = rawContent
-			.replace(/```[\s\S]*?\n|```/g, "") // Remove code blocks
-			.replace(/\/\/.*$/gm, "") // Remove comments
-			.trim();
-
 		try {
-			const results = JSON.parse(cleanedContent);
+			const results = JSON.parse(rawContent);
 			console.log("RESULTS: ", results);
 			return res.json({ results });
 		} catch (parseError) {

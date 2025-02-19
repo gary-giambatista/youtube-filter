@@ -1,5 +1,3 @@
-/** @type {string[]} - video titles to be analyzed by ML model */
-const videoTitles = [];
 /** @type {boolean} - default/intial extension setting to enable/disable the negativity filter */
 let enableNegativityFilter = true;
 /** @type {boolean} - default/intial extension setting to enable/disable the shorts filter */
@@ -45,7 +43,7 @@ function updateState(setting) {
 }
 
 /**
- * Function to observe the #contents element once it exists.
+ * 0. Function to observe the #contents element once it exists.
  */
 function waitForContentsElement() {
 	const parentContainer = document.querySelector("#content"); // Parent that will always exist
@@ -55,7 +53,7 @@ function waitForContentsElement() {
 			if (contentsElement) {
 				console.log("#contents element found!");
 				observer.disconnect(); // Stop observing once #contents is found
-				setupContentsObserver(contentsElement); // Call the function to observe #contents
+				setupContentsObserver(contentsElement); // 1. Call the function to observe #contents
 			}
 		});
 
@@ -67,76 +65,105 @@ function waitForContentsElement() {
 }
 
 /**
- * Sets up a MutationObserver on the #contents element to detect new videos.
+ * 1. Sets up a MutationObserver on the #contents element to detect new videos.
  * @param {Element} contentsElement
  */
 function setupContentsObserver(contentsElement) {
-	const observer = new MutationObserver(() => {
-		// 1. Begin extension's functionality
-		if (enableNegativityFilter) {
-			// Grab all currently loaded video titles from the DOM and mark them as parsed
-			document
-				.querySelectorAll(
-					"ytd-rich-item-renderer:has(#video-title:not(.parsed))"
-				)
-				.forEach((videoCard) => {
-					const titleElement = videoCard.querySelector("#video-title");
-					if (titleElement) {
-						const title = titleElement.textContent.trim();
-						videoTitles.push(title);
-						titleElement.classList.add("parsed");
-					}
-					// Apply filter to Negative Videos on page load
-					videoCard.classList.add("yt-neg-filter-on");
-				});
-		}
-		// Hide Shorts on page load if shorts filter enabled
-		if (enableShortsFilter) {
-			document
-				.querySelectorAll("ytd-rich-shelf-renderer")
-				.forEach((shortsSection) => {
-					shortsSection.classList.add("yt-short-filter-on");
-				});
-		}
+	const observer = new MutationObserver((mutationsList) => {
+		let newVideosFound = false;
 
-		// Trigger debounced processing
-		debouncedProcess();
+		// Logic to prevent infinite API call loop as mutation listener will re-trigger adding new class names
+		mutationsList.forEach((mutation) => {
+			mutation.addedNodes.forEach((node) => {
+				if (
+					node.nodeType === 1 && // Ensure it's an element
+					node.matches?.("ytd-rich-item-renderer:not(.parsed)") // Only new videos
+				) {
+					newVideosFound = true;
+				}
+			});
+		});
+
+		if (newVideosFound) {
+			parseVideoTitles();
+		}
 	});
 
 	observer.observe(contentsElement, { childList: true, subtree: true });
 	console.log("Observer set up to detect new videos.");
 }
 
-// Start observing for the #contents element
+// 0. Start observing for the #contents element -> 1. setupContentsObserver()
 waitForContentsElement();
 
-// 2. Debounced version of the process function
-const debouncedProcess = debounce(processVideoTitles, 500);
+/**
+ * 2. Handle getting the video titles, sending API request to backend and applying the filter on page load. Also handle hiding shorts.
+ */
+function parseVideoTitles() {
+	if (enableNegativityFilter === false) return;
 
-// 3. API call and logic to carry out main function of hiding negative videos
-async function processVideoTitles() {
+	// 3. Hide Shorts on page load if shorts filter enabled
+	hideShorts();
+
+	document
+		.querySelectorAll("ytd-rich-item-renderer:not(.parsed)")
+		.forEach(async (videoCard) => {
+			// Apply filter to Negative Videos on page load - only applies if enableNegativityFilter is true
+			videoCard.classList.add("yt-neg-filter-on");
+
+			const titleElement = videoCard.querySelector("#video-title");
+			if (titleElement) {
+				const title = titleElement.textContent.trim();
+				const isNegativeVideo = await processVideoTitle(title); // 4.
+				// console.log("isNegativeVideo: ", isNegativeVideo);
+				videoCard.classList.add("parsed");
+				handleDomActions(videoCard, title, isNegativeVideo); // 5.
+			}
+		});
+}
+
+/**
+ * 3. Hides Shorts on page load if shorts filter enabled.
+ */
+function hideShorts() {
+	if (enableShortsFilter === false) return;
+
+	document
+		.querySelectorAll("ytd-rich-shelf-renderer:not(.yt-short-filter-on)")
+		.forEach((shortsSection) => {
+			shortsSection.classList.add("yt-short-filter-on");
+		});
+}
+
+/**
+ * 4. API call to carry out main function of hiding a single negative video
+ * @param {string} videoTitle - a single video title
+ * @returns {boolean | undefined} result where true means the video is negative
+ */
+async function processVideoTitle(videoTitle) {
+	/** @type {boolean} - result where true means the video is negative */
+	let isNegativeVideo = false;
+
+	// Don't process the video title if the negativity filter is disabled
 	if (enableNegativityFilter === false) {
-		return;
-	}
-	if (videoTitles.length < 1) {
-		return;
+		return isNegativeVideo;
 	}
 
 	try {
-		console.log("Submitting titles to API:", videoTitles);
+		console.log("Submitting title to API:", videoTitle);
 
-		/** @type {boolean[]} - results where each boolean represents a video title */
-		const negativityResults = await new Promise((resolve, reject) => {
-			// Send a message to background.js to call the OpenAI API
+		isNegativeVideo = await new Promise((resolve, reject) => {
+			// Send a message to background.js to call the AI Model API
 			chrome.runtime.sendMessage(
-				{ type: "fetchNegativityStatus", titles: videoTitles },
+				{ type: "fetchNegativityStatus", title: videoTitle },
 				(response) => {
 					if (chrome.runtime.lastError) {
 						return reject(chrome.runtime.lastError.message);
 					}
 					if (response && response.results) {
-						console.log("ContentScript Results: ", response.results);
-						resolve(response.results);
+						// console.log("ContentScript Results: ", response.results);
+						// Commented out to reduce console logs after going to 1 call per video
+						resolve(response.results.isNegative);
 					} else {
 						reject("No results returned from API");
 					}
@@ -144,50 +171,26 @@ async function processVideoTitles() {
 			);
 		});
 
-		// Map 1 to 1 with negativityResults, Videos that are parsed, but not yet analyzed
-		const nonAnalyzedVideos = document.querySelectorAll(
-			"ytd-rich-item-renderer:not(.analyzed):has(#video-title.parsed"
-		);
-
-		// Logic to handle hiding negative videos
-		videoTitles.forEach((title, index) => {
-			const isNegativeVideo = negativityResults[index];
-			if (isNegativeVideo) {
-				// Hide the video in the DOM
-				const negativeVideoCard = nonAnalyzedVideos[index];
-
-				if (negativeVideoCard) {
-					console.log("Hiding negative video:", title);
-				}
-			} else if (!isNegativeVideo) {
-				// Remove filter effect on the video
-				nonAnalyzedVideos[index].classList.remove("yt-neg-filter-on");
-			}
-			// Add 'analyzed' class to current video to prevent 1 to 1 mapping (negativityResults -> nonAnalyzedVideos) from being thrown off when new videos are parsed then submitted to OpenAI
-			nonAnalyzedVideos[index].classList.add("analyzed");
-		});
-
-		// Reset videoTitles in preparation for next videos to be loaded
-		videoTitles.length = 0;
+		// Return the result of the API call
+		return isNegativeVideo;
 	} catch (error) {
-		console.error("Error calling OpenAI API:", error);
+		console.error("Error calling Model API:", error);
+		return isNegativeVideo;
 	}
 }
 
-// Utility functions
 /**
- * Debounce function to delay execution of a function.
- * @param {Function} func - The function to debounce.
- * @param {number} wait - Time to wait in milliseconds.
- * @returns {Function} - Debounced function.
+ * 5. Determines whether to hide or show a video based on the result of the API call (processVideoTitle -> isNegativeVideo).
+ * @param {HTMLElement} videoCard - main video card element
+ * @param {string} videoTitle - title of the video
+ * @param {boolean} isNegativeVideo - result of the API call to processVideoTitle
  */
-function debounce(func, wait) {
-	let timeout;
-	return function (...args) {
-		clearTimeout(timeout);
-		timeout = setTimeout(() => func(...args), wait);
-	};
+function handleDomActions(videoCard, videoTitle, isNegativeVideo) {
+	if (isNegativeVideo) {
+		// Leave the video hidden in the DOM
+		console.log("Hiding negative video:", videoTitle);
+	} else {
+		// Remove filter effect on the video (show the video)
+		videoCard.classList.remove("yt-neg-filter-on");
+	}
 }
-
-// Todo:
-// 1. Coordinate with Jake on status of rust backend

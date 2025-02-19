@@ -1,16 +1,16 @@
 /**
  * Call OpenAI API with the video titles.
- * @param {string[]} titles - Array of video titles to process.
+ * @param {string} title - video titles to process.
  * @returns {Promise<boolean[]>} - Array of booleans indicating negativity of each title.
  */
-async function fetchNegativityStatus(titles) {
+async function fetchNegativityStatus(title) {
 	try {
 		const response = await fetch("http://localhost:3000/analyze", {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",
 			},
-			body: JSON.stringify({ titles }),
+			body: JSON.stringify({ title }),
 		});
 
 		if (response.ok) {
@@ -33,8 +33,8 @@ async function fetchNegativityStatus(titles) {
 // Listener for messages from contentScript.js to call ML Model API request
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	console.log("Background.js 1: Received message:", request);
-	if (request.type === "fetchNegativityStatus" && request.titles) {
-		fetchNegativityStatus(request.titles)
+	if (request.type === "fetchNegativityStatus" && request.title) {
+		fetchNegativityStatus(request.title)
 			.then((results) => {
 				console.log("Results from fetchNegativityStatus:", results);
 				sendResponse({ results });
