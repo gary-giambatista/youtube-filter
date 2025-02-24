@@ -77,6 +77,30 @@
       padding: 10px;
       margin-top: 10px;
     }
+    /* Coming Soon */
+    .coming-soon {
+      background: #eee;
+      border: 1px solid #ccc;
+      padding: 10px;
+      padding-top: 0;
+      cursor: not-allowed;
+      opacity: 0.35;
+      margin-block: 8px;
+    }
+    .coming-soon h2 {
+      font-size: .875rem;
+    }
+    .coming-soon input {
+      padding: 5px;
+      width: calc(100% - 20px);
+      cursor: not-allowed;
+    }
+    /* Options Section */
+    .options-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
   </style>
   <script type="module" src="./popup.js"></script>
 </head>
@@ -84,22 +108,74 @@
   <h1>YouTube Homepage Filters:</h1>
   <hr></hr>
   <main>
-    <div id="negativity-filter" class="toggle-switch">
-      <h2>Negative Videos:</h2>
-      <label class="switch">
-        <input type="checkbox" id="toggle" checked="true">
-        <span class="slider"></span>
-      </label>
-      <span id="toggle-status">Enabled</span>
-    </div>
-    <div id="shorts-filter" class="toggle-switch">
-      <h2>Shorts:</h2>
-      <label class="switch">
-        <input type="checkbox" id="toggle" checked="true">
-        <span class="slider"></span>
-      </label>
-      <span id="toggle-status">Enabled</span>
-    </div>
+    <!-- Negativity Filter -->
+    <section id="negativity-filter">
+      <div class="toggle-switch">
+        <h2>Negative Videos:</h2> 
+        <label class="switch">
+          <input type="checkbox" id="toggle" checked="true">
+          <span class="slider"></span>
+        </label>
+        <span id="toggle-status">Enabled</span>
+      </div>
+      <form class="options-container">
+        <fieldset id="filter-blur-options">
+          <legend>Filter Blur Level:</legend>
+          
+          <label>
+            <input type="radio" name="strength" value="weak">
+            Weak
+          </label>
+      
+          <label>
+            <input type="radio" name="strength" value="medium" checked>
+            Medium
+          </label>
+      
+          <label>
+            <input type="radio" name="strength" value="strong">
+            Strong
+          </label>
+      
+          <label>
+            <input type="radio" name="strength" value="hide">
+            Hide Videos Completely
+          </label>
+        </fieldset>
+
+        <fieldset id="video-hover-preview-options">
+          <legend>Video Hover Preview</legend>
+
+          <label>
+            <input type="radio" name="preview" value="show" checked>
+            Show
+          </label>
+      
+          <label>
+            <input type="radio" name="preview" value="hide">
+            Hide
+          </label>
+        </fieldset>
+      </form>        
+    </section>
+    <section id="custom-filters">
+      <div class="coming-soon">
+        <h2>Custom Filters coming soon</h2> 
+        <input type="text" placeholder="Filter videos with..."/>
+      </div>
+
+    <hr></hr>
+    <!-- Shorts Filter -->
+    <section id="shorts-filter">
+      <div class="toggle-switch">
+        <h2>Hide All Shorts:</h2>
+        <label class="switch">
+          <input type="checkbox" id="toggle" checked="true">
+          <span class="slider"></span>
+        </label>
+        <span id="toggle-status">Enabled</span>
+      </div>
+    </section>
   </main>
 </body>
 </html>

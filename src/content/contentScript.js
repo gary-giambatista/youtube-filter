@@ -2,6 +2,12 @@
 let enableNegativityFilter = true;
 /** @type {boolean} - default/intial extension setting to enable/disable the shorts filter */
 let enableShortsFilter = true;
+/** @type {string} - class name used to determine how to filter a video (weak, medium, strong, hide) */
+let filterBlurOptionsClass = "yt-neg-filter-on-medium";
+/** @type {string} - class name used to enable video hover preview (show/hide) */
+let videoHoverPreviewOptionsClass = "yt-neg-filter-mouseover-show";
+/** @type {string} - class name used to hide videos during load in and AI processing */
+let loadingBlurClass = "yt-neg-filter-on-medium";
 
 // Get initial user settings from storage after page load (document_idle)
 // This is necessary because popup.js only runs when the popup.html is opened
@@ -30,15 +36,27 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Helper function to update state based on the setting name
 function updateState(setting) {
+	// Enable or disable the negativity filter (hide negative videos)
 	if (setting.name === "negativityFilterToggleState") {
 		enableNegativityFilter = setting.enabled;
 		console.log(
 			`Negativity Filter ${setting.enabled ? "enabled" : "disabled"}`
 		);
 	}
+	// Enabled or disable the shorts filter (hide shorts)
 	if (setting.name === "shortsFilterToggleState") {
 		enableShortsFilter = setting.enabled;
 		console.log(`Shorts Filter ${setting.enabled ? "enabled" : "disabled"}`);
+	}
+	// Update the filter blur options (low, medium, high, hide)
+	if (setting.name === "filterBlurOptions") {
+		filterBlurOptionsClass = `yt-neg-filter-on-${setting.activeSetting}`;
+		console.log("Filter Blur Options:", setting.activeSetting);
+	}
+	// Update the video hover preview options (show, hide)
+	if (setting.name === "videoHoverPreviewOptions") {
+		videoHoverPreviewOptionsClass = `yt-neg-filter-mouseover-${setting.activeSetting}`;
+		console.log("Video Hover Preview Options:", setting.activeSetting);
 	}
 }
 
@@ -72,24 +90,31 @@ function setupContentsObserver(contentsElement) {
 	const observer = new MutationObserver((mutationsList) => {
 		let newVideosFound = false;
 
-		// Logic to prevent infinite API call loop as mutation listener will re-trigger adding new class names
-		mutationsList.forEach((mutation) => {
-			mutation.addedNodes.forEach((node) => {
-				if (
-					node.nodeType === 1 && // Ensure it's an element
-					node.matches?.("ytd-rich-item-renderer:not(.parsed)") // Only new videos
-				) {
-					newVideosFound = true;
-				}
-			});
-		});
+		// Check for new videos and optimize which nodes are being checked
+		for (const mutation of mutationsList) {
+			for (const node of mutation.addedNodes) {
+				// Skip non-element nodes
+				if (node.nodeType !== 1) continue;
+				console.log("Mutation Observer 📋: ", node);
 
+				// Check if the node is a new video card, if so, break the loop
+				if (node.matches?.("ytd-rich-item-renderer:not(.parsed)")) {
+					console.log("New video detected! ✅");
+					newVideosFound = true;
+					break;
+				}
+			}
+			// Exit mutations loop early if a new video is found
+			if (newVideosFound) break;
+		}
+
+		// If new videos are found, parse the video titles
 		if (newVideosFound) {
 			parseVideoTitles();
 		}
 	});
 
-	observer.observe(contentsElement, { childList: true, subtree: true });
+	observer.observe(contentsElement, { childList: true });
 	console.log("Observer set up to detect new videos.");
 }
 
@@ -108,14 +133,13 @@ function parseVideoTitles() {
 	document
 		.querySelectorAll("ytd-rich-item-renderer:not(.parsed)")
 		.forEach(async (videoCard) => {
-			// Apply filter to Negative Videos on page load - only applies if enableNegativityFilter is true
-			videoCard.classList.add("yt-neg-filter-on");
+			// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
+			videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
 
 			const titleElement = videoCard.querySelector("#video-title");
 			if (titleElement) {
 				const title = titleElement.textContent.trim();
 				const isNegativeVideo = await processVideoTitle(title); // 4.
-				// console.log("isNegativeVideo: ", isNegativeVideo);
 				videoCard.classList.add("parsed");
 				handleDomActions(videoCard, title, isNegativeVideo); // 5.
 			}
@@ -187,10 +211,12 @@ async function processVideoTitle(videoTitle) {
  */
 function handleDomActions(videoCard, videoTitle, isNegativeVideo) {
 	if (isNegativeVideo) {
-		// Leave the video hidden in the DOM
+		// Remove loading blur and apply filter to hide negative video
+		videoCard.classList.remove(loadingBlurClass);
+		videoCard.classList.add(filterBlurOptionsClass);
 		console.log("Hiding negative video:", videoTitle);
 	} else {
-		// Remove filter effect on the video (show the video)
-		videoCard.classList.remove("yt-neg-filter-on");
+		// Remove default loading filter and hover effect on the video (show the video as default)
+		videoCard.classList.remove(loadingBlurClass, videoHoverPreviewOptionsClass);
 	}
 }
