@@ -1,7 +1,7 @@
 /**
  * Call OpenAI API with the video titles.
  * @param {string} title - video titles to process.
- * @returns {Promise<boolean[]>} - Array of booleans indicating negativity of each title.
+ * @returns {Promise<boolean>} - boolean indicating negativity of each title.
  */
 async function fetchNegativityStatus(title) {
 	try {
@@ -18,7 +18,12 @@ async function fetchNegativityStatus(title) {
 			console.log("Received backend result:", result);
 
 			// Adjust result handling based on backend response structure
-			return result.results || []; // Fallback to an empty array if results key is missing
+			if (result.result !== undefined) {
+			return result.result
+			} else {
+				console.error("Backend API returned unexpected result:", result);
+				throw new Error("Unexpected backend response");
+			}
 		} else {
 			const errorMessage = await response.text();
 			console.error("Backend API Error:", errorMessage);
@@ -35,9 +40,9 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 	console.log("Background.js 1: Received message:", request);
 	if (request.type === "fetchNegativityStatus" && request.title) {
 		fetchNegativityStatus(request.title)
-			.then((results) => {
-				console.log("Results from fetchNegativityStatus:", results);
-				sendResponse({ results });
+			.then((result) => {
+				console.log("Results from fetchNegativityStatus:", result);
+				sendResponse({ result });
 			})
 			.catch((error) => {
 				console.error("Error fetching negativity status:", error);

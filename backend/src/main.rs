@@ -6,34 +6,32 @@ use tokio::net::TcpListener;
 
 #[derive(Serialize)]
 struct Response {
-    results: Option<Vec<bool>>,
+    result: Option<bool>,
     error: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct TitlesRequest {
-    titles: Vec<String>,
+    title: String,
 }
 
 const PROMPT: &str = "You are a moderator for text inputs which represent the title \
             of YouTube videos. Your task is to determine if the video titles \
-            are negative or not negative. You will receive a JSON array \
-            of strings which represent video titles and it is your task to \
-            return a JSON array of booleans, where the boolean value \
-            of that index is determined by the video title's context; if it \
-            is a negative context please return true for that index, if it is \
-            not negative please return false. The array of booleans returned should \
-            match the length of the array of strings submitted.";
+            are negative or not negative. You will receive string which represents \
+            video's title and it is your task to \
+            return a boolean, where the boolean value determined by the video \
+            title's context. If it is a negative context please return true. \
+            If it is not negative please return false.";
 
 async fn analyze_handler(
     req: Json<TitlesRequest>,
 ) -> ResJson<Response> {
-    let titles = req.titles.clone();
+    let title = req.title.clone();
 
     // Check if the request is valid and contains titles.
-    if titles.is_empty() {
+    if title.is_empty() {
         return ResJson(Response {
-            results: None,
+            result: None,
             error: Some("Invalid request format".to_string()),
         });
     }
@@ -49,7 +47,7 @@ async fn analyze_handler(
     let open_ai_api_key =  match env::var("OPENAI_API_KEY"){
         Ok(key) => key,
         Err(_) => return ResJson(Response {
-            results: None,
+            result: None,
             error: Some("OpenAI API key not found".to_string()),
             })
         };
@@ -70,7 +68,7 @@ async fn analyze_handler(
                 },
                 {
                     "role": "user",
-                    "content": serde_json::to_string(&req.titles).unwrap()
+                    "content": &req.title
                 }
             ],
             "response_format": {
@@ -81,11 +79,10 @@ async fn analyze_handler(
                         "type": "object",
                         "properties": {
                             "titleNegativity": {
-                                "type": "array",
-                                "items": {"type": "boolean"}
-                            }
-                        }
+                                "type": "boolean"
                     }
+                }
+            }
                 }
             },
             "temperature": 1,
@@ -99,7 +96,7 @@ async fn analyze_handler(
     {
         Ok(r) => r.text().await.unwrap(),
         Err(e) => return ResJson(Response {
-            results: None,
+            result: None,
             error: Some(format!("OpenAI API call failed: {}", e)),
         }),
     };
@@ -109,7 +106,7 @@ async fn analyze_handler(
         Ok(v) => v,
         Err(e) => {
             return ResJson(Response {
-                results: None,
+                result: None,
                 error: Some(format!("Failed to parse OpenAI response: {}", e)),
             });
         },
@@ -119,7 +116,7 @@ async fn analyze_handler(
     let content = match parsed_response["choices"][0]["message"]["content"].as_str(){
         Some(s) => s,
         None => return ResJson(Response {
-            results: None,
+            result: None,
             error: Some("Invalid response format from OpenAI".to_string()),
         }),
     };
@@ -129,16 +126,16 @@ async fn analyze_handler(
         Ok(v) => v,
         Err(e) => {
             return ResJson(Response {
-                results: None,
+                result: None,
                 error: Some(format!("Failed to parse titleNegativity array from response: {}", e)),
             });
         },
     };
 
-    let boolean_array: Vec<bool> = match title_negativity["titleNegativity"].as_array(){
-        Some(arr) => arr.iter().map(|v| v.as_bool().unwrap()).collect(),
+    let negativity: bool = match title_negativity["titleNegativity"].as_bool(){
+        Some(b) => b,
         None => return ResJson(Response {
-            results: None,
+            result: None,
             error: Some("Invalid response format from OpenAI".to_string()),
         }),
     };
@@ -147,21 +144,10 @@ async fn analyze_handler(
     println!("Inference Successful\n\n");
     println!("OpenAI Response\n");
     println!("Response: {}\n\n", response);
-    println!("Number of titles received: {}", titles.len());
-    println!("Number of inferences: {}\n\n", boolean_array.len());
-    println!("Received titles:");
-    for title in titles.iter() {
-        println!("{}", title);
-    }
     
-    println!("\n\nInferences:");
-    for (title, result) in titles.iter().zip(boolean_array.iter()) {
-        println!("Title: {}, Negative: {}", title, result);
-    }
-
     // Return the boolean array as a JSON response
     ResJson(Response {
-        results: Some(boolean_array),
+        result: Some(negativity),
         error: None,
     })
 
