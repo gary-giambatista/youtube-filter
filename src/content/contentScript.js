@@ -184,13 +184,12 @@ async function processVideoTitle(videoTitle) {
 					if (chrome.runtime.lastError) {
 						return reject(chrome.runtime.lastError.message);
 					}
-					if (response && response.results) {
-						// console.log("ContentScript Results: ", response.results);
-						// Commented out to reduce console logs after going to 1 call per video
-						resolve(response.results.isNegative);
-					} else {
-						reject("No results returned from API");
+					if (response.result === undefined){
+						return reject("API response was undefined");
 					}
+					// console.log("ContentScript Results: ", response.results);
+					// Commented out to reduce console logs after going to 1 call per video
+					resolve(response.result);
 				}
 			);
 		});
