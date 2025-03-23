@@ -162,7 +162,7 @@ async fn main(){
         post(analyze_handler),
     );
     let port = env::var("PORT").map_or_else(|_| 3000, |v| v.parse().unwrap());
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
     println!("Starting server on {}", addr);
     let listener = TcpListener::bind(addr).await.unwrap();
     axum::serve(listener, app.into_make_service()).await.unwrap();
