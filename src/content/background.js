@@ -5,13 +5,16 @@
  */
 async function fetchNegativityStatus(title) {
 	try {
-		const response = await fetch("http://localhost:3000/analyze", {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ title }),
-		});
+		const response = await fetch(
+			"https://ytfilter.smallsmallserver.duckdns.org/analyze",
+			{
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ title }),
+			}
+		);
 
 		if (response.ok) {
 			const result = await response.json();
@@ -19,7 +22,7 @@ async function fetchNegativityStatus(title) {
 
 			// Adjust result handling based on backend response structure
 			if (result.result !== undefined) {
-			return result.result
+				return result.result;
 			} else {
 				console.error("Backend API returned unexpected result:", result);
 				throw new Error("Unexpected backend response");
