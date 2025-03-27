@@ -139,9 +139,35 @@ function parseVideoTitles() {
 			const titleElement = videoCard.querySelector("#video-title");
 			if (titleElement) {
 				const title = titleElement.textContent.trim();
-				const isNegativeVideo = await processVideoTitle(title); // 4.
-				videoCard.classList.add("parsed");
-				handleDomActions(videoCard, title, isNegativeVideo); // 5.
+
+				// 4. Check cache
+				const cachedValue = await getCachedValue(title);
+				console.log("CachedValue: ", cachedValue);
+
+				// If cached skip processing
+				if (cachedValue !== null) {
+					// Avoid re-parsing this video card
+					videoCard.classList.add("parsed");
+
+					console.log("DOM handled from Cache! 💽", title);
+
+					//* END / STOP HERE. Perform DOM actions (filtering) *
+					handleDomActions(videoCard, title, cachedValue);
+				} else {
+					// 5. If not cached process the video title
+					const isNegativeVideo = await processVideoTitle(title);
+
+					// 6. Store the results of processVideoTitle() in the cache
+					await setCachedValue(title, isNegativeVideo);
+
+					console.log("DOM handled from Server! 🔌");
+
+					// Avoid re-parsing this video card
+					videoCard.classList.add("parsed");
+
+					//* END / STOP HERE. Perform DOM actions (filtering) *
+					handleDomActions(videoCard, title, isNegativeVideo);
+				}
 			}
 		});
 }
@@ -160,7 +186,7 @@ function hideShorts() {
 }
 
 /**
- * 4. API call to carry out main function of hiding a single negative video
+ * 5. API call to carry out main function of hiding a single negative video
  * @param {string} videoTitle - a single video title
  * @returns {boolean | undefined} result where true means the video is negative
  */
@@ -184,7 +210,7 @@ async function processVideoTitle(videoTitle) {
 					if (chrome.runtime.lastError) {
 						return reject(chrome.runtime.lastError.message);
 					}
-					if (response.result === undefined){
+					if (response.result === undefined) {
 						return reject("API response was undefined");
 					}
 					// console.log("ContentScript Results: ", response.results);
@@ -203,7 +229,7 @@ async function processVideoTitle(videoTitle) {
 }
 
 /**
- * 5. Determines whether to hide or show a video based on the result of the API call (processVideoTitle -> isNegativeVideo).
+ * END / STOP HERE. Determines whether to hide or show a video based on the result of the API call (processVideoTitle -> isNegativeVideo).
  * @param {HTMLElement} videoCard - main video card element
  * @param {string} videoTitle - title of the video
  * @param {boolean} isNegativeVideo - result of the API call to processVideoTitle
@@ -218,4 +244,137 @@ function handleDomActions(videoCard, videoTitle, isNegativeVideo) {
 		// Remove default loading filter and hover effect on the video (show the video as default)
 		videoCard.classList.remove(loadingBlurClass, videoHoverPreviewOptionsClass);
 	}
+}
+
+/*
+ * Client Side Caching section
+ * Video titles are cached in Extension Storage > Local for 5 days
+ */
+const CACHE_KEY = "videoTitleCache"; // Root key for all cache entries
+const TTL_DURATION = 432000000; // 5 days in milliseconds for Time-To-Live (TTL)
+const CLEANUP_INTERVAL = 1000 * 60 * 1; // 1 minute in milliseconds
+
+/** @typedef {{ value: boolean, expires: number }} CacheEntry */
+
+let memoryCache = new Map();
+
+/**
+ * Load cache from chrome.storage.local and clean up expired entries.
+ */
+chrome.storage.local.get([CACHE_KEY], (data) => {
+	if (data[CACHE_KEY]) {
+		memoryCache = new Map(Object.entries(data[CACHE_KEY]));
+	}
+	cleanupExpiredEntries();
+});
+
+// Periodic cleanup of expired items -> optional
+// setInterval(cleanupExpiredEntries, CLEANUP_INTERVAL);
+
+/**
+ * Retrieves a value from the cache.
+ * @param {string} key - The key to retrieve from the cache.
+ * @returns {Promise<boolean | null>} - The cached value, or null if not found or expired.
+ */
+async function getCachedValue(key) {
+	if (memoryCache.has(key)) {
+		const { value, expires } = /** @type {CacheEntry} */ (memoryCache.get(key));
+		if (Date.now() > expires) {
+			await removeCachedValue(key);
+			return null;
+		}
+		return value;
+	}
+
+	return new Promise((resolve) => {
+		chrome.storage.local.get([CACHE_KEY], (data) => {
+			const cache =
+				/** @type {Record<string, CacheEntry>} */ (data[CACHE_KEY]) || {};
+			memoryCache = new Map(Object.entries(cache)); // Sync memory cache
+
+			if (cache[key]) {
+				const { value, expires } = cache[key];
+				if (Date.now() > expires) {
+					removeCachedValue(key);
+					resolve(null);
+				} else {
+					resolve(value);
+				}
+			} else {
+				resolve(null);
+			}
+		});
+	});
+}
+
+/**
+ * Sets a value in the cache with a Time-To-Live (TTL).
+ * @param {string} key - The key to store.
+ * @param {boolean} value - The value to store.
+ * @param {number} [ttl=TTL_DURATION] - Time-to-live in milliseconds.
+ * @returns {Promise<void>}
+ */
+async function setCachedValue(key, value, ttl = TTL_DURATION) {
+	const expires = Date.now() + ttl;
+	memoryCache.set(key, { value, expires });
+
+	return new Promise((resolve) => {
+		chrome.storage.local.get([CACHE_KEY], (data) => {
+			/** @type {Record<string, CacheEntry>} */
+			const cache = data[CACHE_KEY] || {};
+			cache[key] = { value, expires };
+			chrome.storage.local.set({ [CACHE_KEY]: cache }, resolve);
+		});
+	});
+}
+
+/**
+ * Removes a key from the cache.
+ * @param {string} key - The key to remove.
+ * @returns {Promise<void>}
+ */
+async function removeCachedValue(key) {
+	memoryCache.delete(key);
+	return new Promise((resolve) => {
+		chrome.storage.local.get([CACHE_KEY], (data) => {
+			/** @type {Record<string, CacheEntry>} */
+			const cache = data[CACHE_KEY] || {};
+			delete cache[key];
+			chrome.storage.local.set({ [CACHE_KEY]: cache }, resolve);
+		});
+	});
+}
+
+/**
+ * Clears the entire cache.
+ * @returns {Promise<void>}
+ */
+async function clearCache() {
+	memoryCache.clear();
+	return chrome.storage.local.remove(CACHE_KEY);
+}
+
+/**
+ * Cleans up expired entries from storage.
+ * @returns {Promise<void>}
+ */
+async function cleanupExpiredEntries() {
+	chrome.storage.local.get([CACHE_KEY], (data) => {
+		/** @type {Record<string, CacheEntry>} */
+		const cache = data[CACHE_KEY] || {};
+		const now = Date.now();
+		let modified = false;
+
+		for (const key in cache) {
+			if (cache[key].expires < now) {
+				delete cache[key];
+				memoryCache.delete(key);
+				modified = true;
+			}
+		}
+
+		if (modified) {
+			chrome.storage.local.set({ [CACHE_KEY]: cache });
+		}
+	});
 }
