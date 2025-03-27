@@ -3,6 +3,7 @@ use reqwest;
 use serde::{Deserialize, Serialize};
 use std::{env, net::SocketAddr};
 use tokio::net::TcpListener;
+use redis::{Commands, Client};
 
 #[derive(Serialize)]
 struct Response {
@@ -36,9 +37,41 @@ async fn analyze_handler(
         });
     }
 
+// Connect to Redis
+    // Use the REDIS_URL environment variable or default to localhost
+    let redis_url = env::var("REDIS_URL").unwrap_or_else(|_| "redis://127.0.0.1/".to_string());
+    let client = match Client::open(redis_url) {
+        Ok(c) => c,
+        Err(e) => {
+            return ResJson(Response {
+                result: None,
+                error: Some(format!("Failed to create Redis client: {}", e)),
+            });
+        }
+    };
+    let mut con = match client.get_connection() {
+        Ok(c) => c,
+        Err(e) => {
+            return ResJson(Response {
+                result: None,
+                error: Some(format!("Failed to get Redis connection: {}", e)),
+            });
+        }
+    };
+
+    // Check if the response is cached in Redis
+    let cache_key = format!("title_negativity:{}", title);
+        if let Ok(cached_response) = con.get::<_, String>(&cache_key) {
+if let Ok(negativity) = serde_json::from_str::<bool>(&cached_response) {
+            return ResJson(Response {
+                result: Some(negativity),
+                error: None,
+            });
+        }
+    }
 
     // Construct the OpenAI API request.
-    let client = reqwest::Client::new();
+    let http_client = reqwest::Client::new();
 
     // Set up the headers for the request.
     let mut headers = HeaderMap::new();
@@ -52,11 +85,11 @@ async fn analyze_handler(
             })
         };
         
-    headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", open_ai_api_key)).unwrap());
+        headers.insert("Authorization", HeaderValue::from_str(&format!("Bearer {}", open_ai_api_key)).unwrap());
     
     // Make the request to OpenAI API.
     let prompt = PROMPT.to_string();
-    let response = match client
+    let response = match http_client
         .post("https://api.openai.com/v1/chat/completions")
         .headers(headers)
         .json(&serde_json::json!({
@@ -100,7 +133,6 @@ async fn analyze_handler(
             error: Some(format!("OpenAI API call failed: {}", e)),
         }),
     };
-
     // Parse the JSON response from OpenAI
     let parsed_response = match serde_json::from_str::<serde_json::Value>(&response) {
         Ok(v) => v,
@@ -140,6 +172,10 @@ async fn analyze_handler(
         }),
     };
 
+    // Cache the response in Redis
+    if let Err(e) = con.set_ex::<_, _, ()>(&cache_key, negativity.to_string(), 31556952) { // Cache for 1 year
+        println!("Failed to cache response in Redis: {}", e);
+   }
     //Print Diagnostics
     println!("Inference Successful\n\n");
     println!("OpenAI Response\n");
