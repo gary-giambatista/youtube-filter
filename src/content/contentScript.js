@@ -1,3 +1,7 @@
+/**
+ * *AREA: User setting variables *
+ */
+
 /** @type {boolean} - default/intial extension setting to enable/disable the negativity filter */
 let enableNegativityFilter = true;
 /** @type {boolean} - default/intial extension setting to enable/disable the shorts filter */
@@ -8,6 +12,10 @@ let filterBlurOptionsClass = "yt-neg-filter-on-medium";
 let videoHoverPreviewOptionsClass = "yt-neg-filter-mouseover-show";
 /** @type {string} - class name used to hide videos during load in and AI processing */
 let loadingBlurClass = "yt-neg-filter-on-medium";
+
+/**
+ * *AREA: Handle Receiving User Settings *
+ */
 
 // Get initial user settings from storage after page load (document_idle)
 // This is necessary because popup.js only runs when the popup.html is opened
@@ -60,6 +68,42 @@ function updateState(setting) {
 	}
 }
 
+/*
+ * AREA: Handle changing category tabs *
+ */
+
+/**
+ * Add click events to all category tabs
+ */
+function handleTabsFiltering() {
+	document
+		.querySelectorAll("#header iron-selector yt-chip-cloud-chip-renderer")
+		.forEach((tabElement) =>
+			tabElement.addEventListener("click", restartVideoProcessing)
+		);
+}
+
+/**
+ *   Removes previously applied filters on existing DOM elements.
+ * * PLEASE NOTE: removing "parsed" from video cards causes the setupContentsObserver() to trigger parseVideoTitles() which processes and filters new videos. For some reason the "Gaming" category tab doesn't work.
+ */
+function restartVideoProcessing() {
+	console.log("RestartVideoProcessing Called! 🧼");
+	// Remove previously applied filter classes from video cards
+	document.querySelectorAll("ytd-rich-item-renderer").forEach((videoCard) => {
+		videoCard.classList.remove(
+			"parsed",
+			loadingBlurClass,
+			videoHoverPreviewOptionsClass,
+			filterBlurOptionsClass
+		);
+	});
+}
+
+/**
+ * * Main Functionality: 6-steps + Last Step *
+ */
+
 /**
  * 0. Function to observe the #contents element once it exists.
  */
@@ -71,6 +115,7 @@ function waitForContentsElement() {
 			if (contentsElement) {
 				console.log("#contents element found!");
 				observer.disconnect(); // Stop observing once #contents is found
+				handleTabsFiltering(); // Enable tabs filtering functionality
 				setupContentsObserver(contentsElement); // 1. Call the function to observe #contents
 			}
 		});
@@ -142,7 +187,7 @@ function parseVideoTitles() {
 
 				// 4. Check cache
 				const cachedValue = await getCachedValue(title);
-				console.log("CachedValue: ", cachedValue);
+				console.log("CachedValue: ", cachedValue, title);
 
 				// If cached skip processing
 				if (cachedValue !== null) {
@@ -239,7 +284,11 @@ function handleDomActions(videoCard, videoTitle, isNegativeVideo) {
 		// Remove loading blur and apply filter to hide negative video
 		videoCard.classList.remove(loadingBlurClass);
 		videoCard.classList.add(filterBlurOptionsClass);
-		console.log("Hiding negative video:", videoTitle);
+		console.log(
+			"%cHiding negative video:",
+			"color: red; font-size: 16px; font-weight: bold;",
+			videoTitle
+		);
 	} else {
 		// Remove default loading filter and hover effect on the video (show the video as default)
 		videoCard.classList.remove(loadingBlurClass, videoHoverPreviewOptionsClass);
@@ -247,8 +296,8 @@ function handleDomActions(videoCard, videoTitle, isNegativeVideo) {
 }
 
 /*
- * Client Side Caching section
- * Video titles are cached in Extension Storage > Local for 5 days
+ * AREA: Client Side Caching section *
+ * Video titles are cached in Extension Storage > Local for 5 days *
  */
 const CACHE_KEY = "videoTitleCache"; // Root key for all cache entries
 const TTL_DURATION = 432000000; // 5 days in milliseconds for Time-To-Live (TTL)
