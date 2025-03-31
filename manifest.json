@@ -43,5 +43,5 @@
 		}
 	],
 	"permissions": ["scripting", "storage"],
-	"host_permissions": ["https://*/*", "http://*/*"]
+	"host_permissions": ["https://ytfilter.smallsmallserver.duckdns.org/analyze"]
 }
