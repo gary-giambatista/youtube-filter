@@ -78,18 +78,3 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 		});
 	}
 });
-
-// Sync all settings to new tabs when they are created (sync new tabs with latest user settings) -> send to contentScript.js
-chrome.tabs.onCreated.addListener((tab) => {
-	chrome.storage.local.get("userSettings", (result) => {
-		const userSettings = result?.userSettings ?? null;
-		if (!userSettings) {
-			console.log("Background.js 3: No LS to sync new tab with yet");
-		}
-
-		console.log("Background.js 3: Syncing settings to new tab:", userSettings);
-
-		// Send the entire settings object to the new tab
-		chrome.tabs.sendMessage(tab.id, { userSettings: userSettings });
-	});
-});
