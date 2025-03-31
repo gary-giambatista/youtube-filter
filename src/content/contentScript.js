@@ -14,6 +14,38 @@ let videoHoverPreviewOptionsClass = "yt-neg-filter-mouseover-show";
 let loadingBlurClass = "yt-neg-filter-on-medium";
 
 /**
+ * * AREA: Const variables for determining which selectors to use *
+ * * (video page vs. homepage) *
+ */
+
+/**@type {boolean} - True if the URL is for a YT video page, false if it is for the Homepage*/
+const IS_VIDEO_PAGE = window.location.href.includes(
+	"https://www.youtube.com/watch?v=" // URL for video pages
+)
+	? true // Video page
+	: false; // Homepage
+
+/**@type {"#content iron-selector yt-chip-cloud-chip-renderer" | "#header iron-selector yt-chip-cloud-chip-renderer"} - Determines if category tab selector should be configured for the video page or homepage */
+const CATEGORY_TAB_SELECTOR = IS_VIDEO_PAGE
+	? "#content iron-selector yt-chip-cloud-chip-renderer" // Video page
+	: "#header iron-selector yt-chip-cloud-chip-renderer"; // Homepage
+
+/**@type {"ytd-compact-video-renderer" | "ytd-rich-item-renderer"} - Determines if video card selector should be configured for the video page or homepage */
+const VIDEO_CARD_SELECTOR = IS_VIDEO_PAGE
+	? "ytd-compact-video-renderer" // Video page
+	: "ytd-rich-item-renderer"; // Homepage
+
+/**@type {"#contents.ytd-item-section-renderer:has(ytd-compact-video-renderer)" | "#contents.ytd-rich-grid-renderer"} - The closest parent element to observe for when video cards will load in on the video page or homepage */
+const CONTENTS_ELEMENT_SELECTOR = IS_VIDEO_PAGE
+	? "#contents.ytd-item-section-renderer:has(ytd-compact-video-renderer)" // Video page
+	: "#contents.ytd-rich-grid-renderer"; // Homepage
+
+/**@type {"ytd-reel-shelf-renderer" | "ytd-rich-shelf-renderer"} - Determines if the shorts selector should be configured for the video page or homepage */
+const SHORTS_SECTION_SELECTOR = IS_VIDEO_PAGE
+	? "ytd-reel-shelf-renderer" // Video page
+	: "ytd-rich-shelf-renderer"; // Homepage
+
+/**
  * *AREA: Handle Receiving User Settings *
  */
 
@@ -77,7 +109,7 @@ function updateState(setting) {
  */
 function handleTabsFiltering() {
 	document
-		.querySelectorAll("#header iron-selector yt-chip-cloud-chip-renderer")
+		.querySelectorAll(CATEGORY_TAB_SELECTOR)
 		.forEach((tabElement) =>
 			tabElement.addEventListener("click", restartVideoProcessing)
 		);
@@ -90,7 +122,7 @@ function handleTabsFiltering() {
 function restartVideoProcessing() {
 	console.log("RestartVideoProcessing Called! 🧼");
 	// Remove previously applied filter classes from video cards
-	document.querySelectorAll("ytd-rich-item-renderer").forEach((videoCard) => {
+	document.querySelectorAll(VIDEO_CARD_SELECTOR).forEach((videoCard) => {
 		videoCard.classList.remove(
 			"parsed",
 			loadingBlurClass,
@@ -111,7 +143,7 @@ function waitForContentsElement() {
 	const parentContainer = document.querySelector("#content"); // Parent that will always exist
 	if (parentContainer) {
 		const observer = new MutationObserver(() => {
-			const contentsElement = document.querySelector("#contents");
+			const contentsElement = document.querySelector(CONTENTS_ELEMENT_SELECTOR);
 			if (contentsElement) {
 				console.log("#contents element found!");
 				observer.disconnect(); // Stop observing once #contents is found
@@ -143,7 +175,7 @@ function setupContentsObserver(contentsElement) {
 				console.log("Mutation Observer 📋: ", node);
 
 				// Check if the node is a new video card, if so, break the loop
-				if (node.matches?.("ytd-rich-item-renderer:not(.parsed)")) {
+				if (node.matches?.(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)) {
 					console.log("New video detected! ✅");
 					newVideosFound = true;
 					break;
@@ -176,7 +208,7 @@ function parseVideoTitles() {
 	hideShorts();
 
 	document
-		.querySelectorAll("ytd-rich-item-renderer:not(.parsed)")
+		.querySelectorAll(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)
 		.forEach(async (videoCard) => {
 			// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
 			videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
@@ -199,6 +231,9 @@ function parseVideoTitles() {
 					//* END / STOP HERE. Perform DOM actions (filtering) *
 					handleDomActions(videoCard, title, cachedValue);
 				} else {
+					// Avoid re-parsing this video card
+					videoCard.classList.add("parsed");
+
 					// 5. If not cached process the video title
 					const isNegativeVideo = await processVideoTitle(title);
 
@@ -206,9 +241,6 @@ function parseVideoTitles() {
 					await setCachedValue(title, isNegativeVideo);
 
 					console.log("DOM handled from Server! 🔌");
-
-					// Avoid re-parsing this video card
-					videoCard.classList.add("parsed");
 
 					//* END / STOP HERE. Perform DOM actions (filtering) *
 					handleDomActions(videoCard, title, isNegativeVideo);
@@ -224,7 +256,7 @@ function hideShorts() {
 	if (enableShortsFilter === false) return;
 
 	document
-		.querySelectorAll("ytd-rich-shelf-renderer:not(.yt-short-filter-on)")
+		.querySelectorAll(`${SHORTS_SECTION_SELECTOR}:not(.yt-short-filter-on)`)
 		.forEach((shortsSection) => {
 			shortsSection.classList.add("yt-short-filter-on");
 		});
