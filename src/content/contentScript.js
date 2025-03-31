@@ -101,8 +101,10 @@ function updateState(setting) {
 }
 
 /*
- * AREA: Handle changing category tabs *
+ * AREA: Handle changing category tabs and clicking YT Logo *
  */
+
+// TODO: A bug exists here where sometimes changing tabs causes YT to load for a few seconds, after the long load our extension's filtering logic isn't carried out
 
 /**
  * Add click events to all category tabs
@@ -110,14 +112,21 @@ function updateState(setting) {
 function handleTabsFiltering() {
 	document
 		.querySelectorAll(CATEGORY_TAB_SELECTOR)
-		.forEach((tabElement) =>
-			tabElement.addEventListener("click", restartVideoProcessing)
-		);
+		.forEach((tabElement, index) => {
+			tabElement.addEventListener("click", () => {
+				restartVideoProcessing();
+
+				// * Tab "All" caches results, so need to manually call parseVideoTiles, otherwise no filtering occurs *
+				if (index === 0) {
+					setTimeout(parseVideoTitles, 0);
+				}
+			});
+		});
 }
 
 /**
  *   Removes previously applied filters on existing DOM elements.
- * * PLEASE NOTE: removing "parsed" from video cards causes the setupContentsObserver() to trigger parseVideoTitles() which processes and filters new videos. For some reason the "Gaming" category tab doesn't work.
+ * * PLEASE NOTE: removing "parsed" from video cards causes the setupContentsObserver() to trigger parseVideoTitles() which processes and filters new videos.
  */
 function restartVideoProcessing() {
 	console.log("RestartVideoProcessing Called! 🧼");
@@ -133,31 +142,57 @@ function restartVideoProcessing() {
 }
 
 /**
+ * Clicking the YT logo uses some sort of cache, need to manually reload the
+ * page otherwise no filtering occurs
+ */
+function handleYouTubeLogoClick() {
+	const youTubeLogo = document.querySelector(
+		"ytd-topbar-logo-renderer#logo > a"
+	);
+
+	youTubeLogo.addEventListener("click", () => {
+		window.location.href = "https://www.youtube.com/";
+	});
+}
+
+/**
  * * Main Functionality: 6-steps + Last Step *
  */
 
 /**
- * 0. Function to observe the #contents element once it exists.
+ * 0. Attempt to setup observer for the closest parent element of video cards.
+ * Will attempt 10 times per second for 7 seconds, waiting for the DOM to load
  */
-function waitForContentsElement() {
-	const parentContainer = document.querySelector("#content"); // Parent that will always exist
-	if (parentContainer) {
-		const observer = new MutationObserver(() => {
-			const contentsElement = document.querySelector(CONTENTS_ELEMENT_SELECTOR);
-			if (contentsElement) {
-				console.log("#contents element found!");
-				observer.disconnect(); // Stop observing once #contents is found
-				handleTabsFiltering(); // Enable tabs filtering functionality
-				setupContentsObserver(contentsElement); // 1. Call the function to observe #contents
-			}
-		});
+function attemptToObserveVideoContainer() {
+	let attempts = 0;
+	const maxAttempts = 50; // 100ms * 70 = 7,000ms (7 seconds) timeout
 
-		observer.observe(parentContainer, { childList: true, subtree: true });
-		console.log("Waiting for #contents element...");
-	} else {
-		console.error("Could not find #content parent container to observe.");
-	}
+	const interval = setInterval(() => {
+		const observerContainer = document.querySelector(CONTENTS_ELEMENT_SELECTOR);
+
+		if (observerContainer || attempts >= maxAttempts) {
+			clearInterval(interval);
+			if (observerContainer) {
+				console.log("Observer Container found (#contents)!👁‍🗨");
+				// 1. Setup observer to wait for video cards to load in and handle scrolling (infinity loading) new videos in
+				setupContentsObserver(observerContainer);
+
+				// Enable the app to work if YT logo is clicked
+				handleYouTubeLogoClick();
+
+				// Enable tabs filtering functionality
+				handleTabsFiltering();
+				return;
+			}
+		}
+
+		attempts++;
+	}, 100);
+	// Finding the container to observe failed
+	return console.log("No Observer Container Found! ❌");
 }
+// 0. Begin the main functionality
+attemptToObserveVideoContainer();
 
 /**
  * 1. Sets up a MutationObserver on the #contents element to detect new videos.
@@ -194,9 +229,6 @@ function setupContentsObserver(contentsElement) {
 	observer.observe(contentsElement, { childList: true });
 	console.log("Observer set up to detect new videos.");
 }
-
-// 0. Start observing for the #contents element -> 1. setupContentsObserver()
-waitForContentsElement();
 
 /**
  * 2. Handle getting the video titles, sending API request to backend and applying the filter on page load. Also handle hiding shorts.
