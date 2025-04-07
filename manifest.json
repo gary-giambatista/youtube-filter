@@ -1,11 +1,11 @@
 {
-	"name": "YouTube Homepage Filter",
-	"description": "Filter negative videos from YouTube's recommendation feed.",
-	"homepage_url": "https://github.com/llagerlof/fresh-chrome-extension",
+	"name": "YouFilter.ai - YouTube Video Filter",
+	"description": "Intelligently filter YouTube videos with AI.",
+	"homepage_url": "https://youfilter.vercel.app/",
 	"version": "0.1",
 	"manifest_version": 3,
 	"action": {
-		"default_title": "YouTube Homepage Filter",
+		"default_title": "YouFilter.ai",
 		"default_popup": "src/popup/popup.html",
 		"default_icon": {
 			"16": "assets/icons/icon16.png",
@@ -27,15 +27,21 @@
 	"content_scripts": [
 		{
 			"run_at": "document_idle",
-			"matches": ["https://www.youtube.com/"],
+			"matches": [
+				"https://www.youtube.com/",
+				"https://www.youtube.com/watch?v=*"
+			],
 			"js": ["src/content/contentScript.js"]
 		},
 		{
-			"matches": ["https://www.youtube.com/"],
+			"matches": [
+				"https://www.youtube.com/",
+				"https://www.youtube.com/watch?v=*"
+			],
 			"css": ["src/content/content.css"],
 			"run_at": "document_start"
 		}
 	],
-	"permissions": ["tabs", "activeTab", "scripting", "storage"],
-	"host_permissions": ["https://*/*", "http://*/*"]
+	"permissions": ["scripting", "storage"],
+	"host_permissions": ["https://ytfilter.smallsmallserver.duckdns.org/analyze"]
 }
