@@ -42,6 +42,6 @@
 			"run_at": "document_start"
 		}
 	],
-	"permissions": ["scripting", "storage"],
+	"permissions": ["storage"],
 	"host_permissions": ["https://ytfilter.smallsmallserver.duckdns.org/analyze"]
 }
