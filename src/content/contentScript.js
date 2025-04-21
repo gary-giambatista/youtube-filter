@@ -25,6 +25,11 @@ const IS_VIDEO_PAGE = window.location.href.includes(
 	? true // Video page
 	: false; // Homepage
 
+/**@type {"ytd-page-manager #secondary" | "ytd-page-manager #primary"} - The parent element which we will look for incase the CONTENTS_ELEMENT_SELECTOR is swapped on on specific YT category pages */
+const CONTENTS_PARENT_SELECTOR = IS_VIDEO_PAGE
+	? "ytd-page-manager #secondary" // Video page
+	: "ytd-page-manager #primary"; // Homepage
+
 /**@type {"#content iron-selector yt-chip-cloud-chip-renderer" | "#header iron-selector yt-chip-cloud-chip-renderer"} - Determines if category tab selector should be configured for the video page or homepage */
 const CATEGORY_TAB_SELECTOR = IS_VIDEO_PAGE
 	? "#content iron-selector yt-chip-cloud-chip-renderer" // Video page
@@ -104,8 +109,6 @@ function updateState(setting) {
  * AREA: Handle changing category tabs and clicking YT Logo *
  */
 
-// TODO: A bug exists here where sometimes changing tabs causes YT to load for a few seconds, after the long load our extension's filtering logic isn't carried out
-
 /**
  * Add click events to all category tabs
  */
@@ -119,6 +122,11 @@ function handleTabsFiltering() {
 				// * Tab "All" caches results, so need to manually call parseVideoTiles, otherwise no filtering occurs *
 				if (index === 0) {
 					setTimeout(parseVideoTitles, 0);
+				} else {
+					// Avoid parsing more than 1 time
+					// if (isCurrentlyParsingVideos) return;
+
+					setTimeout(parseVideoTitles, 750); // Call parse videos incase the DOM content is mutated instead of replaced
 				}
 			});
 		});
@@ -150,7 +158,25 @@ function handleYouTubeLogoClick() {
 		"ytd-topbar-logo-renderer#logo > a"
 	);
 
-	youTubeLogo.addEventListener("click", () => {
+	if (!youTubeLogo) return;
+
+	youTubeLogo.addEventListener("click", (e) => {
+		// If Ctrl (Windows/Linux), Meta (Cmd on Mac), Shift, Alt, or middle-click are used, let default happen
+		if (
+			e.ctrlKey ||
+			e.metaKey ||
+			e.shiftKey ||
+			e.altKey ||
+			e.button === 1 // middle click
+		) {
+			// Let default browser behavior happen (e.g., open in new tab)
+			return;
+		}
+
+		// Prevent default navigation
+		e.preventDefault();
+
+		// Manually redirect to force page reload
 		window.location.href = "https://www.youtube.com/";
 	});
 }
@@ -165,33 +191,44 @@ function handleYouTubeLogoClick() {
  */
 function attemptToObserveVideoContainer() {
 	let attempts = 0;
-	const maxAttempts = 50; // 100ms * 70 = 7,000ms (7 seconds) timeout
+	const maxAttempts = 280; // 25ms * 280 = 7,000ms (7 seconds)
 
 	const interval = setInterval(() => {
 		const observerContainer = document.querySelector(CONTENTS_ELEMENT_SELECTOR);
 
-		if (observerContainer || attempts >= maxAttempts) {
+		if (observerContainer) {
 			clearInterval(interval);
-			if (observerContainer) {
-				console.log("Observer Container found (#contents)!👁‍🗨");
-				// 1. Setup observer to wait for video cards to load in and handle scrolling (infinity loading) new videos in
-				setupContentsObserver(observerContainer);
+			console.log("Observer Container found (#contents)!👁‍🗨");
 
-				// Enable the app to work if YT logo is clicked
-				handleYouTubeLogoClick();
+			//1.
+			//TODO: problem is the mutation listener is added to late, increases the speed here to .25ms is it fast enough? also open the apecture on what is listened to with subtree: true? Alternatively find a way to call parseVideoTitles() above without wasting too many duplicate parses
 
-				// Enable tabs filtering functionality
-				handleTabsFiltering();
-				return;
-			}
+			//2.
+			// TODO: why are we getting an extra observation and failed observer message after swapping tabs? Could the old observer be still active and a second one is added?
+
+			//3.
+			// TODO: Changing category tabs, a new #contents element is not loaded in, or if it is, it is merged with existing one so it keeps its custom properties. The mutation observer is lost, but the custom property is maintained. This makes it impossible to avoid adding more than 1 mutation observer to the same element
+
+			// 1. Setup observer to wait for video cards to load in and handle scrolling (infinity loading) new videos in
+			setupContentsObserver(observerContainer);
+
+			// Enable the app to work if YT logo is clicked
+			handleYouTubeLogoClick();
+
+			// Enable tabs filtering functionality
+			handleTabsFiltering();
+			return;
 		}
 
-		attempts++;
-	}, 100);
-	// Finding the container to observe failed
-	return console.log("No Observer Container Found! ❌");
+		if (++attempts >= maxAttempts) {
+			clearInterval(interval);
+			console.log("No Observer Container Found! ❌");
+		}
+	}, 25);
 }
+
 // 0. Begin the main functionality
+console.log("Interval to Observe CALLED from file root 🟢");
 attemptToObserveVideoContainer();
 
 /**
@@ -199,8 +236,10 @@ attemptToObserveVideoContainer();
  * @param {Element} contentsElement
  */
 function setupContentsObserver(contentsElement) {
+	if (!contentsElement || contentsElement.__observerAttached) return;
+
 	const observer = new MutationObserver((mutationsList) => {
-		let newVideosFound = false;
+		console.log("Mutation List: ", mutationsList);
 
 		// Check for new videos and optimize which nodes are being checked
 		for (const mutation of mutationsList) {
@@ -210,75 +249,83 @@ function setupContentsObserver(contentsElement) {
 				console.log("Mutation Observer 📋: ", node);
 
 				// Check if the node is a new video card, if so, break the loop
-				if (node.matches?.(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)) {
-					console.log("New video detected! ✅");
-					newVideosFound = true;
-					break;
+				if (
+					!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`) ||
+					!node.previousSibling.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)
+				) {
+					console.log("New video detected! ✅", node);
+					// Avoid parsing more than 1 time
+					// if (isCurrentlyParsingVideos) return;
+
+					return parseVideoTitles();
+					// TODO: Could 1 to 1 this, by directly passing in node and parsing it individually here instead of trusting a 1 to many batching process
 				}
 			}
-			// Exit mutations loop early if a new video is found
-			if (newVideosFound) break;
-		}
-
-		// If new videos are found, parse the video titles
-		if (newVideosFound) {
-			parseVideoTitles();
 		}
 	});
 
 	observer.observe(contentsElement, { childList: true });
+	contentsElement.__observerAttached = true;
 	console.log("Observer set up to detect new videos.");
 }
+
+// let isCurrentlyParsingVideos = false;
 
 /**
  * 2. Handle getting the video titles, sending API request to backend and applying the filter on page load. Also handle hiding shorts.
  */
 function parseVideoTitles() {
-	if (enableNegativityFilter === false) return;
-
 	// 3. Hide Shorts on page load if shorts filter enabled
 	hideShorts();
 
-	document
-		.querySelectorAll(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)
-		.forEach(async (videoCard) => {
-			// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
-			videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
+	// Skip filtering negative videos
+	if (enableNegativityFilter === false) return;
 
-			const titleElement = videoCard.querySelector("#video-title");
-			if (titleElement) {
-				const title = titleElement.textContent.trim();
+	const videoCards = document.querySelectorAll(
+		`${VIDEO_CARD_SELECTOR}:not(.parsed)`
+	);
 
-				// 4. Check cache
-				const cachedValue = await getCachedValue(title);
-				console.log("CachedValue: ", cachedValue, title);
+	// No videos are present to filter
+	if (videoCards.length < 1) return;
 
-				// If cached skip processing
-				if (cachedValue !== null) {
-					// Avoid re-parsing this video card
-					videoCard.classList.add("parsed");
+	videoCards.forEach(async (videoCard) => {
+		// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
+		videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
 
-					console.log("DOM handled from Cache! 💽", title);
+		const titleElement = videoCard.querySelector("#video-title");
+		if (titleElement) {
+			const title = titleElement.textContent.trim();
 
-					//* END / STOP HERE. Perform DOM actions (filtering) *
-					handleDomActions(videoCard, title, cachedValue);
-				} else {
-					// Avoid re-parsing this video card
-					videoCard.classList.add("parsed");
+			// 4. Check cache
+			const cachedValue = await getCachedValue(title);
+			console.log("CachedValue: ", cachedValue, title);
 
-					// 5. If not cached process the video title
-					const isNegativeVideo = await processVideoTitle(title);
+			// If cached skip processing
+			if (cachedValue !== null) {
+				// Avoid re-parsing this video card
+				videoCard.classList.add("parsed");
 
-					// 6. Store the results of processVideoTitle() in the cache
-					await setCachedValue(title, isNegativeVideo);
+				console.log("DOM handled from Cache! 💽", title);
 
-					console.log("DOM handled from Server! 🔌");
+				//* END / STOP HERE. Perform DOM actions (filtering) *
+				handleDomActions(videoCard, title, cachedValue);
+			} else {
+				// Avoid re-parsing this video card
+				videoCard.classList.add("parsed");
 
-					//* END / STOP HERE. Perform DOM actions (filtering) *
-					handleDomActions(videoCard, title, isNegativeVideo);
-				}
+				// 5. If not cached process the video title
+				const isNegativeVideo = await processVideoTitle(title);
+
+				// 6. Store the results of processVideoTitle() in the cache
+				await setCachedValue(title, isNegativeVideo);
+
+				console.log("DOM handled from Server! 🔌");
+
+				//* END / STOP HERE. Perform DOM actions (filtering) *
+				handleDomActions(videoCard, title, isNegativeVideo);
 			}
-		});
+		}
+	});
 }
 
 /**
