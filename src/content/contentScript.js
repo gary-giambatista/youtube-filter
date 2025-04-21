@@ -13,8 +13,8 @@ let videoHoverPreviewOptionsClass = "yt-neg-filter-mouseover-show";
 /** @type {string} - class name used to hide videos during load in and AI processing */
 let loadingBlurClass = "yt-neg-filter-on-medium";
 
+let globalContentsObserver = null;
 let isCurrentlyParsingVideos = false;
-
 /**
  * * AREA: Const variables for determining which selectors to use *
  * * (video page vs. homepage) *
@@ -119,17 +119,19 @@ function handleTabsFiltering() {
 		.querySelectorAll(CATEGORY_TAB_SELECTOR)
 		.forEach((tabElement, index) => {
 			tabElement.addEventListener("click", () => {
+				if (index === 0) {
+					// Force page to reload
+					setTimeout(handleReloadingHomePage(tabElement), 0);
+					document.querySelector("ytd-topbar-logo-renderer#logo > a").click();
+				}
+				//1. Re-write mutation observer function to be able to CANCEL the mutation listener from here.
+				disconnectContentsObserver();
+				// 2.
 				restartVideoProcessing();
+				//3. call attemptToObserveVideoContainer here
+				attemptToObserveVideoContainer();
 
 				// * Tab "All" caches results, so need to manually call parseVideoTiles, otherwise no filtering occurs *
-				if (index === 0) {
-					setTimeout(parseVideoTitles, 0);
-				} else {
-					// Avoid parsing more than 1 time
-					if (isCurrentlyParsingVideos) return;
-
-					setTimeout(parseVideoTitles, 750); // Call parse videos incase the DOM content is mutated instead of replaced
-				}
 			});
 		});
 }
@@ -162,7 +164,11 @@ function handleYouTubeLogoClick() {
 
 	if (!youTubeLogo) return;
 
-	youTubeLogo.addEventListener("click", (e) => {
+	handleReloadingHomePage(youTubeLogo);
+}
+
+function handleReloadingHomePage(element) {
+	element.addEventListener("click", (e) => {
 		// If Ctrl (Windows/Linux), Meta (Cmd on Mac), Shift, Alt, or middle-click are used, let default happen
 		if (
 			e.ctrlKey ||
@@ -202,23 +208,8 @@ function attemptToObserveVideoContainer() {
 			clearInterval(interval);
 			console.log("Observer Container found (#contents)!👁‍🗨");
 
-			//1.
-			//TODO: problem is the mutation listener is added to late, increases the speed here to .25ms is it fast enough? also open the apecture on what is listened to with subtree: true? Alternatively find a way to call parseVideoTitles() above without wasting too many duplicate parses
-
-			//2.
-			// TODO: why are we getting an extra observation and failed observer message after swapping tabs? Could the old observer be still active and a second one is added?
-
-			//3.
-			// TODO: Changing category tabs, a new #contents element is not loaded in, or if it is, it is merged with existing one so it keeps its custom properties. The mutation observer is lost, but the custom property is maintained. This makes it impossible to avoid adding more than 1 mutation observer to the same element
-
 			// 1. Setup observer to wait for video cards to load in and handle scrolling (infinity loading) new videos in
 			setupContentsObserver(observerContainer);
-
-			// Enable the app to work if YT logo is clicked
-			handleYouTubeLogoClick();
-
-			// Enable tabs filtering functionality
-			handleTabsFiltering();
 			return;
 		}
 
@@ -233,42 +224,98 @@ function attemptToObserveVideoContainer() {
 console.log("Interval to Observe CALLED from file root 🟢");
 attemptToObserveVideoContainer();
 
+// TODO: Add logic to handle attaching this when DOM is ready. Interval/Mutation observer
+setTimeout(() => {
+	console.log("Logo logic attached 👍");
+	// Enable the app to work if YT logo is clicked
+	handleYouTubeLogoClick();
+
+	console.log("Tab logic attached 👍");
+	// Enable tabs filtering functionality
+	handleTabsFiltering();
+}, 1500);
+
 /**
  * 1. Sets up a MutationObserver on the #contents element to detect new videos.
  * @param {Element} contentsElement
  */
-function setupContentsObserver(contentsElement) {
-	if (!contentsElement || contentsElement.__observerAttached) return;
+// function setupContentsObserver(contentsElement) {
+// 	// Prevent from adding more than 1 mutation observer to one contents element
+// 	if (!contentsElement || contentsElement.__observerAttached) return;
 
+// 	const observer = new MutationObserver((mutationsList) => {
+// 		console.log("Mutation List: ", mutationsList);
+
+// 		// Check for new videos and optimize which nodes are being checked
+// 		for (const mutation of mutationsList) {
+// 			for (const node of mutation.addedNodes) {
+// 				// Skip non-element nodes
+// 				if (node.nodeType !== 1) continue;
+// 				console.log("Mutation Observer 📋: ", node);
+
+// 				// Check if the node is a new video card, if so, break the loop
+// 				if (
+// 					!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`) ||
+// 					!node.previousSibling.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)
+// 				) {
+// 					console.log("New video detected! ✅", node);
+
+// 					return parseVideoTitles();
+// 					// TODO: Could 1 to 1 this, by directly passing in node and parsing it individually here instead of trusting a 1 to many batching process
+// 				}
+// 			}
+// 		}
+// 	});
+
+// 	observer.observe(contentsElement, { childList: true });
+// 	contentsElement.__observerAttached = true;
+// 	console.log("Observer set up to detect new videos.");
+// }
+
+// Global mutation observer variable
+
+/**
+ * Sets up a MutationObserver on the #contents element to detect new videos.
+ * Allows external observer instance or uses global.
+ *
+ * @param {Element} contentsElement - The element to observe.
+ */
+function setupContentsObserver(contentsElement) {
 	const observer = new MutationObserver((mutationsList) => {
 		console.log("Mutation List: ", mutationsList);
 
-		// Check for new videos and optimize which nodes are being checked
 		for (const mutation of mutationsList) {
 			for (const node of mutation.addedNodes) {
-				// Skip non-element nodes
 				if (node.nodeType !== 1) continue;
 				console.log("Mutation Observer 📋: ", node);
 
-				// Check if the node is a new video card, if so, break the loop
 				if (
 					!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`) ||
-					!node.previousSibling.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)
+					!node.previousSibling?.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)
 				) {
 					console.log("New video detected! ✅", node);
-					// Avoid parsing more than 1 time
-					if (isCurrentlyParsingVideos) return;
-
 					return parseVideoTitles();
-					// TODO: Could 1 to 1 this, by directly passing in node and parsing it individually here instead of trusting a 1 to many batching process
 				}
 			}
 		}
 	});
 
+	// Store in global if not already
+	globalContentsObserver = observer;
+
 	observer.observe(contentsElement, { childList: true });
-	contentsElement.__observerAttached = true;
 	console.log("Observer set up to detect new videos.");
+}
+
+/**
+ * Disconnects the global MutationObserver if it exists.
+ */
+function disconnectContentsObserver() {
+	if (globalContentsObserver) {
+		globalContentsObserver.disconnect();
+		globalContentsObserver = null;
+		console.log("Observer disconnected.");
+	}
 }
 
 /**
@@ -339,9 +386,8 @@ async function parseVideoTitles() {
 	if (videoCards.length < 1) return;
 	if (isCurrentlyParsingVideos) return;
 
-	console.log("IS PARSING set to TRUE: 🚩");
+	console.log("Parsing Started: 🚩");
 	isCurrentlyParsingVideos = true;
-
 	try {
 		// Map each videoCard to a promise
 		const parsingPromises = videoCards.map(async (videoCard) => {
@@ -376,7 +422,7 @@ async function parseVideoTitles() {
 		// Wait for all videos to be parsed before marking as not busy
 		await Promise.all(parsingPromises);
 	} finally {
-		console.log("IS PARSING set to FALSE: 🏁");
+		console.log("Parsing completed: 🏁");
 		isCurrentlyParsingVideos = false;
 	}
 }
@@ -451,7 +497,8 @@ function handleDomActions(videoCard, videoTitle, isNegativeVideo) {
 		console.log(
 			"%cHiding negative video:",
 			"color: red; font-size: 16px; font-weight: bold;",
-			videoTitle
+			videoTitle,
+			videoCard
 		);
 	} else {
 		// Remove default loading filter and hover effect on the video (show the video as default)
