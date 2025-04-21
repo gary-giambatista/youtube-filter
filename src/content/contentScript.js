@@ -13,6 +13,8 @@ let videoHoverPreviewOptionsClass = "yt-neg-filter-mouseover-show";
 /** @type {string} - class name used to hide videos during load in and AI processing */
 let loadingBlurClass = "yt-neg-filter-on-medium";
 
+let isCurrentlyParsingVideos = false;
+
 /**
  * * AREA: Const variables for determining which selectors to use *
  * * (video page vs. homepage) *
@@ -124,7 +126,7 @@ function handleTabsFiltering() {
 					setTimeout(parseVideoTitles, 0);
 				} else {
 					// Avoid parsing more than 1 time
-					// if (isCurrentlyParsingVideos) return;
+					if (isCurrentlyParsingVideos) return;
 
 					setTimeout(parseVideoTitles, 750); // Call parse videos incase the DOM content is mutated instead of replaced
 				}
@@ -255,7 +257,7 @@ function setupContentsObserver(contentsElement) {
 				) {
 					console.log("New video detected! ✅", node);
 					// Avoid parsing more than 1 time
-					// if (isCurrentlyParsingVideos) return;
+					if (isCurrentlyParsingVideos) return;
 
 					return parseVideoTitles();
 					// TODO: Could 1 to 1 this, by directly passing in node and parsing it individually here instead of trusting a 1 to many batching process
@@ -269,63 +271,114 @@ function setupContentsObserver(contentsElement) {
 	console.log("Observer set up to detect new videos.");
 }
 
-// let isCurrentlyParsingVideos = false;
-
 /**
  * 2. Handle getting the video titles, sending API request to backend and applying the filter on page load. Also handle hiding shorts.
  */
-function parseVideoTitles() {
-	// 3. Hide Shorts on page load if shorts filter enabled
+// function parseVideoTitles() {
+// 	// 3. Hide Shorts on page load if shorts filter enabled
+// 	hideShorts();
+
+// 	// Skip filtering negative videos
+// 	if (enableNegativityFilter === false) return;
+
+// 	const videoCards = document.querySelectorAll(
+// 		`${VIDEO_CARD_SELECTOR}:not(.parsed)`
+// 	);
+
+// 	// No videos are present to filter
+// 	if (videoCards.length < 1) return;
+
+// 	videoCards.forEach(async (videoCard) => {
+// 		// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
+// 		videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
+
+// 		const titleElement = videoCard.querySelector("#video-title");
+// 		if (titleElement) {
+// 			const title = titleElement.textContent.trim();
+
+// 			// 4. Check cache
+// 			const cachedValue = await getCachedValue(title);
+// 			console.log("CachedValue: ", cachedValue, title);
+
+// 			// If cached skip processing
+// 			if (cachedValue !== null) {
+// 				// Avoid re-parsing this video card
+// 				videoCard.classList.add("parsed");
+
+// 				console.log("DOM handled from Cache! 💽", title);
+
+// 				//* END / STOP HERE. Perform DOM actions (filtering) *
+// 				handleDomActions(videoCard, title, cachedValue);
+// 			} else {
+// 				// Avoid re-parsing this video card
+// 				videoCard.classList.add("parsed");
+
+// 				// 5. If not cached process the video title
+// 				const isNegativeVideo = await processVideoTitle(title);
+
+// 				// 6. Store the results of processVideoTitle() in the cache
+// 				await setCachedValue(title, isNegativeVideo);
+
+// 				console.log("DOM handled from Server! 🔌");
+
+// 				//* END / STOP HERE. Perform DOM actions (filtering) *
+// 				handleDomActions(videoCard, title, isNegativeVideo);
+// 			}
+// 		}
+// 	});
+// }
+async function parseVideoTitles() {
 	hideShorts();
 
-	// Skip filtering negative videos
 	if (enableNegativityFilter === false) return;
 
-	const videoCards = document.querySelectorAll(
-		`${VIDEO_CARD_SELECTOR}:not(.parsed)`
+	const videoCards = Array.from(
+		document.querySelectorAll(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)
 	);
 
-	// No videos are present to filter
 	if (videoCards.length < 1) return;
+	if (isCurrentlyParsingVideos) return;
 
-	videoCards.forEach(async (videoCard) => {
-		// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
-		videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
+	console.log("IS PARSING set to TRUE: 🚩");
+	isCurrentlyParsingVideos = true;
 
-		const titleElement = videoCard.querySelector("#video-title");
-		if (titleElement) {
+	try {
+		// Map each videoCard to a promise
+		const parsingPromises = videoCards.map(async (videoCard) => {
+			// Add UI classes
+			videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
+
+			const titleElement = videoCard.querySelector("#video-title");
+			if (!titleElement) return;
+
 			const title = titleElement.textContent.trim();
 
-			// 4. Check cache
-			const cachedValue = await getCachedValue(title);
-			console.log("CachedValue: ", cachedValue, title);
+			try {
+				const cachedValue = await getCachedValue(title);
+				console.log("CachedValue: ", cachedValue, title);
 
-			// If cached skip processing
-			if (cachedValue !== null) {
-				// Avoid re-parsing this video card
 				videoCard.classList.add("parsed");
 
-				console.log("DOM handled from Cache! 💽", title);
-
-				//* END / STOP HERE. Perform DOM actions (filtering) *
-				handleDomActions(videoCard, title, cachedValue);
-			} else {
-				// Avoid re-parsing this video card
-				videoCard.classList.add("parsed");
-
-				// 5. If not cached process the video title
-				const isNegativeVideo = await processVideoTitle(title);
-
-				// 6. Store the results of processVideoTitle() in the cache
-				await setCachedValue(title, isNegativeVideo);
-
-				console.log("DOM handled from Server! 🔌");
-
-				//* END / STOP HERE. Perform DOM actions (filtering) *
-				handleDomActions(videoCard, title, isNegativeVideo);
+				if (cachedValue !== null) {
+					console.log("DOM handled from Cache! 💽", title);
+					handleDomActions(videoCard, title, cachedValue);
+				} else {
+					const isNegativeVideo = await processVideoTitle(title);
+					await setCachedValue(title, isNegativeVideo);
+					console.log("DOM handled from Server! 🔌", title);
+					handleDomActions(videoCard, title, isNegativeVideo);
+				}
+			} catch (err) {
+				console.error("Error processing video:", err, title);
 			}
-		}
-	});
+		});
+
+		// Wait for all videos to be parsed before marking as not busy
+		await Promise.all(parsingPromises);
+	} finally {
+		console.log("IS PARSING set to FALSE: 🏁");
+		isCurrentlyParsingVideos = false;
+	}
 }
 
 /**
