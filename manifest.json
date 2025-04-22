@@ -2,7 +2,7 @@
 	"name": "YouFilter.ai - YouTube Video Filter",
 	"description": "Intelligently filter YouTube videos with AI.",
 	"homepage_url": "https://youfilter.vercel.app/",
-	"version": "0.1",
+	"version": "0.2",
 	"manifest_version": 3,
 	"action": {
 		"default_title": "YouFilter.ai",

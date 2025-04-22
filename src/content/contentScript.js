@@ -14,6 +14,16 @@ let videoHoverPreviewOptionsClass = "yt-neg-filter-mouseover-show";
 let loadingBlurClass = "yt-neg-filter-on-medium";
 
 /**
+ * *AREA: Modifiable Variables *
+ */
+
+/** @type {MutationObserver | null} - global variable of the mutation observer watching for new YT videos. Is reset when a category tab is clicked. */
+let globalContentsObserver = null;
+
+/** @type {boolean} - true when videos are being parsed, false when ALL videos have finished being parsed */
+let isCurrentlyParsingVideos = false;
+
+/**
  * * AREA: Const variables for determining which selectors to use *
  * * (video page vs. homepage) *
  */
@@ -24,6 +34,12 @@ const IS_VIDEO_PAGE = window.location.href.includes(
 )
 	? true // Video page
 	: false; // Homepage
+
+// ! This is unused. Left for now, incase we need it.
+/**@type {"ytd-page-manager #secondary" | "ytd-page-manager #primary"} - The parent element which we will look for incase the CONTENTS_ELEMENT_SELECTOR is swapped on on specific YT category pages */
+const CONTENTS_PARENT_SELECTOR = IS_VIDEO_PAGE
+	? "ytd-page-manager #secondary" // Video page
+	: "ytd-page-manager #primary"; // Homepage
 
 /**@type {"#content iron-selector yt-chip-cloud-chip-renderer" | "#header iron-selector yt-chip-cloud-chip-renderer"} - Determines if category tab selector should be configured for the video page or homepage */
 const CATEGORY_TAB_SELECTOR = IS_VIDEO_PAGE
@@ -104,29 +120,33 @@ function updateState(setting) {
  * AREA: Handle changing category tabs and clicking YT Logo *
  */
 
-// TODO: A bug exists here where sometimes changing tabs causes YT to load for a few seconds, after the long load our extension's filtering logic isn't carried out
-
 /**
- * Add click events to all category tabs
+ * Add click events to all category tabs and handle correctly processing new videos after a category tab is clicked
  */
 function handleTabsFiltering() {
 	document
 		.querySelectorAll(CATEGORY_TAB_SELECTOR)
 		.forEach((tabElement, index) => {
 			tabElement.addEventListener("click", () => {
+				if (index === 0) {
+					// Force page to reload: needed because YT is jacked
+					setTimeout(handleReloadingHomePage(tabElement), 0);
+					document.querySelector("ytd-topbar-logo-renderer#logo > a").click();
+				}
+				// 1. Remove existing mutation observer
+				disconnectContentsObserver();
+
+				// 2. Remove all added classes
 				restartVideoProcessing();
 
-				// * Tab "All" caches results, so need to manually call parseVideoTiles, otherwise no filtering occurs *
-				if (index === 0) {
-					setTimeout(parseVideoTitles, 0);
-				}
+				// 3. Set up a new mutation observer to restart filtering
+				attemptToObserveVideoContainer();
 			});
 		});
 }
 
 /**
  *   Removes previously applied filters on existing DOM elements.
- * * PLEASE NOTE: removing "parsed" from video cards causes the setupContentsObserver() to trigger parseVideoTitles() which processes and filters new videos.
  */
 function restartVideoProcessing() {
 	console.log("RestartVideoProcessing Called! 🧼");
@@ -150,7 +170,33 @@ function handleYouTubeLogoClick() {
 		"ytd-topbar-logo-renderer#logo > a"
 	);
 
-	youTubeLogo.addEventListener("click", () => {
+	if (!youTubeLogo) return;
+
+	handleReloadingHomePage(youTubeLogo);
+}
+
+/**
+ * Reloads youtube.com to load in new videos and restart filtering
+ * @param {HTMLElement} element - a HTML element to add a click event to
+ */
+function handleReloadingHomePage(element) {
+	element.addEventListener("click", (e) => {
+		// If Ctrl (Windows/Linux), Meta (Cmd on Mac), Shift, Alt, or middle-click are used, let default happen
+		if (
+			e.ctrlKey ||
+			e.metaKey ||
+			e.shiftKey ||
+			e.altKey ||
+			e.button === 1 // middle click
+		) {
+			// Let default browser behavior happen (e.g., open in new tab)
+			return;
+		}
+
+		// Prevent default navigation
+		e.preventDefault();
+
+		// Manually redirect to force page reload
 		window.location.href = "https://www.youtube.com/";
 	});
 }
@@ -165,120 +211,156 @@ function handleYouTubeLogoClick() {
  */
 function attemptToObserveVideoContainer() {
 	let attempts = 0;
-	const maxAttempts = 50; // 100ms * 70 = 7,000ms (7 seconds) timeout
+	const maxAttempts = 280; // 25ms * 280 = 7,000ms (7 seconds)
 
 	const interval = setInterval(() => {
 		const observerContainer = document.querySelector(CONTENTS_ELEMENT_SELECTOR);
 
-		if (observerContainer || attempts >= maxAttempts) {
+		if (observerContainer) {
 			clearInterval(interval);
-			if (observerContainer) {
-				console.log("Observer Container found (#contents)!👁‍🗨");
-				// 1. Setup observer to wait for video cards to load in and handle scrolling (infinity loading) new videos in
-				setupContentsObserver(observerContainer);
+			console.log("Observer Container found (#contents)!👁‍🗨");
 
-				// Enable the app to work if YT logo is clicked
-				handleYouTubeLogoClick();
-
-				// Enable tabs filtering functionality
-				handleTabsFiltering();
-				return;
-			}
+			// 1. Setup observer to wait for video cards to load in and handle scrolling new videos in (infinity loading)
+			setupContentsObserver(observerContainer);
+			return;
 		}
 
-		attempts++;
-	}, 100);
-	// Finding the container to observe failed
-	return console.log("No Observer Container Found! ❌");
+		if (++attempts >= maxAttempts) {
+			clearInterval(interval);
+			console.log("No Observer Container Found! ❌");
+		}
+	}, 25);
 }
+
 // 0. Begin the main functionality
+console.log("Interval to Observe CALLED from file root 🟢");
 attemptToObserveVideoContainer();
+
+// TODO: Add logic to handle attaching this when DOM is ready. Interval/Mutation observer
+setTimeout(() => {
+	console.log("Logo logic attached 👍");
+	// Enable the app to work if YT logo is clicked
+	handleYouTubeLogoClick();
+
+	console.log("Tab logic attached 👍");
+	// Enable tabs filtering functionality
+	handleTabsFiltering();
+}, 1500);
 
 /**
  * 1. Sets up a MutationObserver on the #contents element to detect new videos.
- * @param {Element} contentsElement
+ * @param {Element} contentsElement - The element to observe.
  */
 function setupContentsObserver(contentsElement) {
 	const observer = new MutationObserver((mutationsList) => {
-		let newVideosFound = false;
+		console.log("Mutation List: ", mutationsList);
 
-		// Check for new videos and optimize which nodes are being checked
 		for (const mutation of mutationsList) {
 			for (const node of mutation.addedNodes) {
-				// Skip non-element nodes
 				if (node.nodeType !== 1) continue;
-				console.log("Mutation Observer 📋: ", node);
+				console.log("Mutation Observer (Added node) 📋: ", node);
 
-				// Check if the node is a new video card, if so, break the loop
-				if (node.matches?.(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)) {
-					console.log("New video detected! ✅");
-					newVideosFound = true;
-					break;
+				if (!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)) {
+					console.log("New video detected! ✅", node);
+					return parseVideoTitles();
 				}
 			}
-			// Exit mutations loop early if a new video is found
-			if (newVideosFound) break;
-		}
+			for (const node of mutation.removedNodes) {
+				if (node.nodeType !== 1) continue;
+				console.log("Mutation Observer (Removed node) 📋: ", node);
 
-		// If new videos are found, parse the video titles
-		if (newVideosFound) {
-			parseVideoTitles();
+				if (!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)) {
+					console.log("New video detected! ✅", node);
+					return parseVideoTitles();
+				}
+			}
 		}
 	});
+
+	// Store in global if not already
+	globalContentsObserver = observer;
 
 	observer.observe(contentsElement, { childList: true });
 	console.log("Observer set up to detect new videos.");
 }
 
 /**
+ * Disconnects the global MutationObserver if it exists.
+ */
+function disconnectContentsObserver() {
+	if (globalContentsObserver) {
+		globalContentsObserver.disconnect();
+		globalContentsObserver = null;
+		console.log("Observer disconnected.");
+	}
+}
+
+/**
  * 2. Handle getting the video titles, sending API request to backend and applying the filter on page load. Also handle hiding shorts.
  */
-function parseVideoTitles() {
-	if (enableNegativityFilter === false) return;
-
+async function parseVideoTitles() {
 	// 3. Hide Shorts on page load if shorts filter enabled
 	hideShorts();
 
-	document
-		.querySelectorAll(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)
-		.forEach(async (videoCard) => {
+	// Skip filtering negative videos
+	if (enableNegativityFilter === false) return;
+
+	// Prevent parsing more than 1 time
+	if (isCurrentlyParsingVideos) return;
+
+	const videoCards = Array.from(
+		document.querySelectorAll(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)
+	);
+
+	// No videos are present to filter
+	if (videoCards.length < 1) return;
+
+	console.log("Parsing Started: 🚩");
+	isCurrentlyParsingVideos = true;
+
+	try {
+		// Map each videoCard to a promise
+		const parsingPromises = videoCards.map(async (videoCard) => {
 			// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
 			videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
 
 			const titleElement = videoCard.querySelector("#video-title");
-			if (titleElement) {
-				const title = titleElement.textContent.trim();
+			if (!titleElement) return;
 
+			const title = titleElement.textContent.trim();
+
+			try {
 				// 4. Check cache
 				const cachedValue = await getCachedValue(title);
 				console.log("CachedValue: ", cachedValue, title);
 
+				videoCard.classList.add("parsed");
+
 				// If cached skip processing
 				if (cachedValue !== null) {
-					// Avoid re-parsing this video card
-					videoCard.classList.add("parsed");
-
 					console.log("DOM handled from Cache! 💽", title);
-
-					//* END / STOP HERE. Perform DOM actions (filtering) *
 					handleDomActions(videoCard, title, cachedValue);
 				} else {
-					// Avoid re-parsing this video card
-					videoCard.classList.add("parsed");
-
 					// 5. If not cached process the video title
 					const isNegativeVideo = await processVideoTitle(title);
 
 					// 6. Store the results of processVideoTitle() in the cache
 					await setCachedValue(title, isNegativeVideo);
 
-					console.log("DOM handled from Server! 🔌");
-
-					//* END / STOP HERE. Perform DOM actions (filtering) *
+					console.log("DOM handled from Server! 🔌", title);
 					handleDomActions(videoCard, title, isNegativeVideo);
 				}
+			} catch (error) {
+				console.error("Error processing video:", error, title);
 			}
 		});
+
+		// Wait for all videos to be parsed before marking as not busy
+		await Promise.all(parsingPromises);
+	} finally {
+		console.log("Parsing completed: 🏁");
+		isCurrentlyParsingVideos = false;
+	}
 }
 
 /**
@@ -351,7 +433,8 @@ function handleDomActions(videoCard, videoTitle, isNegativeVideo) {
 		console.log(
 			"%cHiding negative video:",
 			"color: red; font-size: 16px; font-weight: bold;",
-			videoTitle
+			videoTitle,
+			videoCard
 		);
 	} else {
 		// Remove default loading filter and hover effect on the video (show the video as default)
