@@ -13,8 +13,16 @@ let videoHoverPreviewOptionsClass = "yt-neg-filter-mouseover-show";
 /** @type {string} - class name used to hide videos during load in and AI processing */
 let loadingBlurClass = "yt-neg-filter-on-medium";
 
+/**
+ * *AREA: Modifiable Variables *
+ */
+
+/** @type {MutationObserver | null} - global variable of the mutation observer watching for new YT videos. Is reset when a category tab is clicked. */
 let globalContentsObserver = null;
+
+/** @type {boolean} - true when videos are being parsed, false when ALL videos have finished being parsed */
 let isCurrentlyParsingVideos = false;
+
 /**
  * * AREA: Const variables for determining which selectors to use *
  * * (video page vs. homepage) *
@@ -27,6 +35,7 @@ const IS_VIDEO_PAGE = window.location.href.includes(
 	? true // Video page
 	: false; // Homepage
 
+// ! This is unused. Left for now, incase we need it.
 /**@type {"ytd-page-manager #secondary" | "ytd-page-manager #primary"} - The parent element which we will look for incase the CONTENTS_ELEMENT_SELECTOR is swapped on on specific YT category pages */
 const CONTENTS_PARENT_SELECTOR = IS_VIDEO_PAGE
 	? "ytd-page-manager #secondary" // Video page
@@ -112,7 +121,7 @@ function updateState(setting) {
  */
 
 /**
- * Add click events to all category tabs
+ * Add click events to all category tabs and handle correctly processing new videos after a category tab is clicked
  */
 function handleTabsFiltering() {
 	document
@@ -120,25 +129,24 @@ function handleTabsFiltering() {
 		.forEach((tabElement, index) => {
 			tabElement.addEventListener("click", () => {
 				if (index === 0) {
-					// Force page to reload
+					// Force page to reload: needed because YT is jacked
 					setTimeout(handleReloadingHomePage(tabElement), 0);
 					document.querySelector("ytd-topbar-logo-renderer#logo > a").click();
 				}
-				//1. Re-write mutation observer function to be able to CANCEL the mutation listener from here.
+				// 1. Remove existing mutation observer
 				disconnectContentsObserver();
-				// 2.
-				restartVideoProcessing();
-				//3. call attemptToObserveVideoContainer here
-				attemptToObserveVideoContainer();
 
-				// * Tab "All" caches results, so need to manually call parseVideoTiles, otherwise no filtering occurs *
+				// 2. Remove all added classes
+				restartVideoProcessing();
+
+				// 3. Set up a new mutation observer to restart filtering
+				attemptToObserveVideoContainer();
 			});
 		});
 }
 
 /**
  *   Removes previously applied filters on existing DOM elements.
- * * PLEASE NOTE: removing "parsed" from video cards causes the setupContentsObserver() to trigger parseVideoTitles() which processes and filters new videos.
  */
 function restartVideoProcessing() {
 	console.log("RestartVideoProcessing Called! 🧼");
@@ -167,6 +175,10 @@ function handleYouTubeLogoClick() {
 	handleReloadingHomePage(youTubeLogo);
 }
 
+/**
+ * Reloads youtube.com to load in new videos and restart filtering
+ * @param {HTMLElement} element - a HTML element to add a click event to
+ */
 function handleReloadingHomePage(element) {
 	element.addEventListener("click", (e) => {
 		// If Ctrl (Windows/Linux), Meta (Cmd on Mac), Shift, Alt, or middle-click are used, let default happen
@@ -208,7 +220,7 @@ function attemptToObserveVideoContainer() {
 			clearInterval(interval);
 			console.log("Observer Container found (#contents)!👁‍🗨");
 
-			// 1. Setup observer to wait for video cards to load in and handle scrolling (infinity loading) new videos in
+			// 1. Setup observer to wait for video cards to load in and handle scrolling new videos in (infinity loading)
 			setupContentsObserver(observerContainer);
 			return;
 		}
@@ -237,47 +249,6 @@ setTimeout(() => {
 
 /**
  * 1. Sets up a MutationObserver on the #contents element to detect new videos.
- * @param {Element} contentsElement
- */
-// function setupContentsObserver(contentsElement) {
-// 	// Prevent from adding more than 1 mutation observer to one contents element
-// 	if (!contentsElement || contentsElement.__observerAttached) return;
-
-// 	const observer = new MutationObserver((mutationsList) => {
-// 		console.log("Mutation List: ", mutationsList);
-
-// 		// Check for new videos and optimize which nodes are being checked
-// 		for (const mutation of mutationsList) {
-// 			for (const node of mutation.addedNodes) {
-// 				// Skip non-element nodes
-// 				if (node.nodeType !== 1) continue;
-// 				console.log("Mutation Observer 📋: ", node);
-
-// 				// Check if the node is a new video card, if so, break the loop
-// 				if (
-// 					!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`) ||
-// 					!node.previousSibling.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)
-// 				) {
-// 					console.log("New video detected! ✅", node);
-
-// 					return parseVideoTitles();
-// 					// TODO: Could 1 to 1 this, by directly passing in node and parsing it individually here instead of trusting a 1 to many batching process
-// 				}
-// 			}
-// 		}
-// 	});
-
-// 	observer.observe(contentsElement, { childList: true });
-// 	contentsElement.__observerAttached = true;
-// 	console.log("Observer set up to detect new videos.");
-// }
-
-// Global mutation observer variable
-
-/**
- * Sets up a MutationObserver on the #contents element to detect new videos.
- * Allows external observer instance or uses global.
- *
  * @param {Element} contentsElement - The element to observe.
  */
 function setupContentsObserver(contentsElement) {
@@ -287,12 +258,18 @@ function setupContentsObserver(contentsElement) {
 		for (const mutation of mutationsList) {
 			for (const node of mutation.addedNodes) {
 				if (node.nodeType !== 1) continue;
-				console.log("Mutation Observer 📋: ", node);
+				console.log("Mutation Observer (Added node) 📋: ", node);
 
-				if (
-					!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`) ||
-					!node.previousSibling?.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)
-				) {
+				if (!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)) {
+					console.log("New video detected! ✅", node);
+					return parseVideoTitles();
+				}
+			}
+			for (const node of mutation.removedNodes) {
+				if (node.nodeType !== 1) continue;
+				console.log("Mutation Observer (Removed node) 📋: ", node);
+
+				if (!node.matches?.(`${VIDEO_CARD_SELECTOR}.parsed`)) {
 					console.log("New video detected! ✅", node);
 					return parseVideoTitles();
 				}
@@ -321,77 +298,30 @@ function disconnectContentsObserver() {
 /**
  * 2. Handle getting the video titles, sending API request to backend and applying the filter on page load. Also handle hiding shorts.
  */
-// function parseVideoTitles() {
-// 	// 3. Hide Shorts on page load if shorts filter enabled
-// 	hideShorts();
-
-// 	// Skip filtering negative videos
-// 	if (enableNegativityFilter === false) return;
-
-// 	const videoCards = document.querySelectorAll(
-// 		`${VIDEO_CARD_SELECTOR}:not(.parsed)`
-// 	);
-
-// 	// No videos are present to filter
-// 	if (videoCards.length < 1) return;
-
-// 	videoCards.forEach(async (videoCard) => {
-// 		// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
-// 		videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
-
-// 		const titleElement = videoCard.querySelector("#video-title");
-// 		if (titleElement) {
-// 			const title = titleElement.textContent.trim();
-
-// 			// 4. Check cache
-// 			const cachedValue = await getCachedValue(title);
-// 			console.log("CachedValue: ", cachedValue, title);
-
-// 			// If cached skip processing
-// 			if (cachedValue !== null) {
-// 				// Avoid re-parsing this video card
-// 				videoCard.classList.add("parsed");
-
-// 				console.log("DOM handled from Cache! 💽", title);
-
-// 				//* END / STOP HERE. Perform DOM actions (filtering) *
-// 				handleDomActions(videoCard, title, cachedValue);
-// 			} else {
-// 				// Avoid re-parsing this video card
-// 				videoCard.classList.add("parsed");
-
-// 				// 5. If not cached process the video title
-// 				const isNegativeVideo = await processVideoTitle(title);
-
-// 				// 6. Store the results of processVideoTitle() in the cache
-// 				await setCachedValue(title, isNegativeVideo);
-
-// 				console.log("DOM handled from Server! 🔌");
-
-// 				//* END / STOP HERE. Perform DOM actions (filtering) *
-// 				handleDomActions(videoCard, title, isNegativeVideo);
-// 			}
-// 		}
-// 	});
-// }
 async function parseVideoTitles() {
+	// 3. Hide Shorts on page load if shorts filter enabled
 	hideShorts();
 
+	// Skip filtering negative videos
 	if (enableNegativityFilter === false) return;
+
+	// Prevent parsing more than 1 time
+	if (isCurrentlyParsingVideos) return;
 
 	const videoCards = Array.from(
 		document.querySelectorAll(`${VIDEO_CARD_SELECTOR}:not(.parsed)`)
 	);
 
+	// No videos are present to filter
 	if (videoCards.length < 1) return;
-	if (isCurrentlyParsingVideos) return;
 
 	console.log("Parsing Started: 🚩");
 	isCurrentlyParsingVideos = true;
+
 	try {
 		// Map each videoCard to a promise
 		const parsingPromises = videoCards.map(async (videoCard) => {
-			// Add UI classes
+			// Apply loading filter + hover preview setting to all videos on page load - only applies if enableNegativityFilter is true (on)
 			videoCard.classList.add(loadingBlurClass, videoHoverPreviewOptionsClass);
 
 			const titleElement = videoCard.querySelector("#video-title");
@@ -400,22 +330,28 @@ async function parseVideoTitles() {
 			const title = titleElement.textContent.trim();
 
 			try {
+				// 4. Check cache
 				const cachedValue = await getCachedValue(title);
 				console.log("CachedValue: ", cachedValue, title);
 
 				videoCard.classList.add("parsed");
 
+				// If cached skip processing
 				if (cachedValue !== null) {
 					console.log("DOM handled from Cache! 💽", title);
 					handleDomActions(videoCard, title, cachedValue);
 				} else {
+					// 5. If not cached process the video title
 					const isNegativeVideo = await processVideoTitle(title);
+
+					// 6. Store the results of processVideoTitle() in the cache
 					await setCachedValue(title, isNegativeVideo);
+
 					console.log("DOM handled from Server! 🔌", title);
 					handleDomActions(videoCard, title, isNegativeVideo);
 				}
-			} catch (err) {
-				console.error("Error processing video:", err, title);
+			} catch (error) {
+				console.error("Error processing video:", error, title);
 			}
 		});
 
